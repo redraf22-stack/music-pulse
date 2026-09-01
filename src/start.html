@@ -17,6 +17,7 @@
 <div class="modal-field"><label data-i18n="settings_mic">Микрофон (ввод)</label><select class="modal-select" id="mic-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
 <div class="modal-field"><label data-i18n="settings_speaker">Динамики (вывод)</label><select class="modal-select" id="speaker-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
 <div class="modal-field"><label data-i18n="camera_label">📷 Камера (видео)</label><select class="modal-select" id="camera-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
+<div class="modal-field"><label>📁 Папка с музыкой</label><div style="display:flex;gap:8px;align-items:center;"><input type="text" id="music-dir-input" readonly style="margin-bottom:0;flex:1;" placeholder="По умолчанию"><button class="btn-small" onclick="pickMusicDir()" style="flex-shrink:0;">Выбрать</button></div><div style="font-size:11px;color:var(--sub);margin-top:4px;">Где хранятся твои MP3/WAV/OGG файлы</div></div>
 </div>
 </div>
 

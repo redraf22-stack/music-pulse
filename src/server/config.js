@@ -58,4 +58,10 @@ function createServer(app) {
         : http.createServer(app);
 }
 
-module.exports = { PORT, SRC_DIR, KEY_PATH, CERT_PATH, IS_HTTPS, DATA_DIR, MUSIC_DIR, createServer };
+// Custom music directory (сохраняется в settings.json)
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+function loadSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch (e) { return {}; } }
+function saveSettings(s) { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2)); } catch (e) {} }
+function getCustomMusicDir() { const s = loadSettings(); return s.musicDir || MUSIC_DIR; }
+function setCustomMusicDir(dir) { const s = loadSettings(); s.musicDir = dir; saveSettings(s); }
+module.exports = { PORT, SRC_DIR, DATA_DIR, MUSIC_DIR, KEY_PATH, CERT_PATH, IS_HTTPS, createServer, getCustomMusicDir, setCustomMusicDir, loadSettings, saveSettings };

@@ -14,7 +14,7 @@ let localTracksCache = null, lastCacheUpdate = 0; const CACHE_TTL = 60000;
 async function getLocalTracks(force) {
     const now = Date.now();
     if (localTracksCache && !force && (now - lastCacheUpdate) < CACHE_TTL) return localTracksCache;
-    const dir = path.join(__dirname, '..', 'music');
+    const dir = require('./config.js').getCustomMusicDir();
     if (!fs.existsSync(dir)) { localTracksCache = []; lastCacheUpdate = now; return []; }
     const files = fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f));
     const tracks = await Promise.all(files.map(f => limit(async () => {
@@ -59,4 +59,10 @@ function findLocalMatch(deezerTrack, localTracks) {
     }
     return best;
 }
-module.exports = { normalizeStr, normalizeTrack, getLocalTracks, findCover, limit, findLocalMatch };
+function setMusicDir(newDir) {
+    const config = require('./config.js');
+    config.setCustomMusicDir(newDir);
+    localTracksCache = null;
+    lastCacheUpdate = 0;
+}
+module.exports = { normalizeStr, normalizeTrack, getLocalTracks, findCover, limit, findLocalMatch, setMusicDir };

@@ -86,3 +86,8 @@ ipcMain.handle('connect-to-server', async (event, info) => {
         return { success: true };
     } catch (error) { return { success: false, error: error.message }; }
 });
+ipcMain.handle('select-folder', async () => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+});

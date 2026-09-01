@@ -1,14 +1,15 @@
 {
   "name": "musicpulse",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MusicPulse - совместное прослушивание музыки в локальной сети",
   "main": "electron/main.js",
-  "scripts": {
+    "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "server": "node src/server/index.js",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win"
+    "postinstall": "node scripts/fix-peer.js",
+    "build": "node scripts/fix-peer.js && electron-builder",
+    "build:win": "node scripts/fix-peer.js && electron-builder --win"
   },
   "author": "RedRaf22",
   "license": "MIT",

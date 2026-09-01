@@ -78,3 +78,36 @@ window.electronAPI.connectToServer({ip:ip,port:port,https:document.getElementByI
 const nickAC=new CustomAutocomplete('nickname','ac-nick-list','ac-nick-wrapper','syncmusic_nick_history');
 applyTranslations();
 })();
+// ===== ВЫБОР ПАПКИ С МУЗЫКОЙ =====
+async function loadMusicDir() {
+    try {
+        const r = await fetch('/api/music-dir');
+        const d = await r.json();
+        const inp = document.getElementById('music-dir-input');
+        if (inp && d.dir) inp.value = d.dir;
+    } catch (e) {}
+}
+
+async function pickMusicDir() {
+    if (!window.electronAPI || !window.electronAPI.selectFolder) {
+        showToast('Выбор папки доступен только в приложении', true);
+        return;
+    }
+    const dir = await window.electronAPI.selectFolder();
+    if (!dir) return;
+    try {
+        const r = await fetch('/api/music-dir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dir }) });
+        const d = await r.json();
+        if (d.success) {
+            document.getElementById('music-dir-input').value = d.dir;
+            showToast('📁 Папка изменена');
+        } else showToast(d.error || 'Ошибка', true);
+    } catch (e) { showToast('Ошибка сохранения', true); }
+}
+
+// Загружаем текущую папку при открытии настроек
+const origOpenSettings = window.openSettings;
+window.openSettings = function() {
+    origOpenSettings();
+    loadMusicDir();
+};
