@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.pem
+src/music/*
+!src/music/.gitkeep
+src/uploads/
+src/urlcache/
+src/server/url-tracks.json

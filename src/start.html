@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MusicPulse</title>
+<link rel="stylesheet" href="css/start.css">
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div class="custom-modal-overlay" id="custom-modal"><div class="custom-modal-box"><span class="cm-icon" id="cm-icon"></span><div class="cm-title" id="cm-title"></div><div class="cm-message" id="cm-message"></div><div class="cm-buttons" id="cm-buttons"></div></div></div>
+
+<div class="modal-overlay" id="settings-modal">
+<div class="modal-box">
+<button class="modal-close" onclick="closeSettings()">✕</button>
+<h2 data-i18n="settings_title">⚙️ Настройки</h2>
+<div class="modal-field"><label data-i18n="settings_lang">Язык / Language</label><div class="lang-switch"><button class="lang-btn active" id="lang-ru" onclick="setLanguage('ru')">Русский</button><button class="lang-btn" id="lang-en" onclick="setLanguage('en')">English</button></div></div>
+<div class="modal-field"><label data-i18n="settings_mic">Микрофон (ввод)</label><select class="modal-select" id="mic-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
+<div class="modal-field"><label data-i18n="settings_speaker">Динамики (вывод)</label><select class="modal-select" id="speaker-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
+<div class="modal-field"><label data-i18n="camera_label">📷 Камера (видео)</label><select class="modal-select" id="camera-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
+</div>
+</div>
+
+<div class="auth-box">
+<button class="settings-open-btn" onclick="openSettings()" title="Настройки">⚙️</button>
+<h1>🎵 MusicPulse</h1>
+<div class="subtitle" data-i18n="subtitle">Синхронное прослушивание музыки</div>
+
+<div class="ac-wrapper" id="ac-nick-wrapper"><input type="text" id="nickname" maxlength="15" autocomplete="off" placeholder="Введите ваш никнейм" data-i18n-ph="nickname_ph"><div class="ac-list" id="ac-nick-list"></div></div>
+<button class="primary" onclick="createRoom()" data-i18n="create_room">Создать комнату</button>
+
+<div id="web-join">
+<div class="divider" data-i18n="or_join">или присоединиться</div>
+<input type="text" id="room-code" maxlength="5" style="text-transform:uppercase" autocomplete="off" placeholder="Код комнаты (5 цифр)" data-i18n-ph="room_code_ph">
+<button class="secondary" onclick="joinRoom()" data-i18n="join_room">Войти в комнату</button>
+</div>
+
+<div class="electron-section" id="electron-section">
+<div class="section-title" data-i18n="local_rooms">Комнаты в локальной сети</div>
+<div class="server-list" id="server-list"><div class="empty-state" data-i18n="searching_servers">Поиск комнат...</div></div>
+<div class="section-title" data-i18n="direct_connect">Прямое подключение (IP:код)</div>
+<div class="manual-row">
+<input type="text" id="manual-addr" placeholder="192.168.1.100:12345" autocomplete="off">
+<button class="btn-small" onclick="connectManual()" data-i18n="connect_btn">Подключить</button>
+</div>
+<label class="https-row"><input type="checkbox" id="manual-https" checked><span data-i18n="https_label">Использовать HTTPS</span></label>
+</div>
+
+<div class="status" id="status"></div>
+</div>
+
+<script src="js/i18n.js"></script>
+<script src="js/helpers.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/start.js"></script>
+</body>
+</html>
