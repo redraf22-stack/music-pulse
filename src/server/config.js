@@ -4,8 +4,13 @@ const https = require('https');
 const http = require('http');
 
 const PORT = 3001;
-const DATA_DIR = process.env.MUSICPULSE_DATA || path.join(__dirname, '..');
-const MUSIC_DIR = path.join(DATA_DIR, 'music');
+const os = require('os');
+let DATA_DIR = process.env.MUSICPULSE_DATA || path.join(__dirname, '..');
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {
+    DATA_DIR = path.join(os.homedir(), 'MusicPulseData');
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+let MUSIC_DIR = (process.env.MUSICPULSE_MUSIC && fs.existsSync(process.env.MUSICPULSE_MUSIC)) ? process.env.MUSICPULSE_MUSIC : path.join(DATA_DIR, 'music');
 try { fs.mkdirSync(MUSIC_DIR, { recursive: true }); } catch (e) {}
 
 // ✅ SRC_DIR = папка src (родитель папки server)

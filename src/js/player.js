@@ -5,6 +5,7 @@ const SVG_PREV='<svg width="16" height="16" viewBox="0 0 24 24"><path d="M6 6h2v
 const SVG_NEXT='<svg width="16" height="16" viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18V6z" fill="currentColor"/></svg>';
 const SVG_REPEAT='<svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" fill="currentColor"/></svg>';
 const SVG_QUEUE='<svg width="16" height="16" viewBox="0 0 24 24"><path d="M11 3h2v10.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V3zM5 19h14v2H5z" fill="currentColor"/></svg>';
+let trackLoadedAt=0;
 const searchAC=new CustomAutocomplete('search-input','ac-search-list','ac-search-wrapper','syncmusic_search_history');
 document.getElementById('search-input').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();if(searchAC.isOpen&&searchAC.selectedIndex>=0){this.value=searchAC.items[searchAC.selectedIndex];}searchAC.close();setTimeout(()=>{searchMusic();},10);}});
 function showReadyButton(){document.getElementById('player-bar').innerHTML=`<div style="width:100%;text-align:center;padding:10px;"><p style="color:var(--sub);margin-bottom:12px;font-size:14px;">${translate('autoplay_blocked')}</p><button class="primary" id="unlock-audio-btn" style="max-width:350px;margin:0 auto;">${escapeHtml(translate('click_to_enable'))}</button></div>`;document.getElementById('unlock-audio-btn').addEventListener('click',enableAudio);}
@@ -35,10 +36,10 @@ function updateProgressRO(){const p=document.getElementById('progress'),c=docume
 function seekAudio(pc){if(!audio.duration||(myRole!=='admin'&&!isMod))return;audio.currentTime=(pc/100)*audio.duration;socket.emit('seek',audio.currentTime);}
 socket.on('sync',state=>{
 const ti=document.getElementById('p-title'),a=document.getElementById('p-artist'),p=document.getElementById('play-btn'),c=document.getElementById('p-cover');
-if(ti)ti.textContent=state.trackName||translate('waiting');
-if(a)a.textContent=state.trackArtist||'—';
-if(p)p.innerHTML=state.playing?SVG_PAUSE:SVG_PLAY;
-if(c){if(state.trackCover){c.src=state.trackCover;c.style.display='block';}else c.style.display='none';}
+if(ti&&state.trackName!==undefined)ti.textContent=state.trackName||translate('waiting');
+if(a&&state.trackArtist!==undefined)a.textContent=state.trackArtist||'—';
+if(p&&state.playing!==undefined)p.innerHTML=state.playing?SVG_PAUSE:SVG_PLAY;
+if(c){if(state.trackCover!==undefined){if(state.trackCover){c.src=state.trackCover;c.style.display='block';}else c.style.display='none';}}
 if(state.isRepeat!==undefined){isRepeat=!!state.isRepeat;const rb=document.getElementById('repeat-btn');if(rb)rb.classList.toggle('active',isRepeat);}
 updateQueueTrackInfo(state);
 const ns=state.trackUrl?(window.location.origin+state.trackUrl):'';
@@ -49,7 +50,7 @@ const urlChanged=ns&&audio.src!==ns;
 if(ns&&(urlChanged||identityChanged)){
 trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';
 audio.pause();audio.src=ns;audio.load();
-const onReady=()=>{if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
+const onReady=()=>{if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
 audio.addEventListener('canplay',onReady,{once:true});
 audio.addEventListener('loadedmetadata',onReady,{once:true});
 setTimeout(()=>{if(trackChanging)onReady();},3000);
@@ -57,18 +58,20 @@ return;
 }
 if(!trackChanging&&state.trackUrl){
 if(state.isSeek&&audio.readyState>=2){audio.currentTime=state.currentTime;lastSyncTime=Date.now();}
-else if(!isSeeking){
+else if(!isSeeking&&Date.now()-trackLoadedAt>5000){
 const expected=(state.playing&&state.startedAt)?(Date.now()-state.startedAt)/1000:(state.currentTime||0);
+if(expected>=0&&(!audio.duration||expected<=audio.duration)){
 const diff=Math.abs(audio.currentTime-expected);
 if(diff>1.5&&audio.readyState>=2){audio.currentTime=expected;}
 }
+}
 lastSyncTime=Date.now();
-if(state.playing&&isReady){if(audio.paused)audio.play().catch(()=>{});}else if(!state.playing){if(!audio.paused)audio.pause();}
+if(state.playing&&isReady){if(audio.paused&&!audio.ended)audio.play().catch(()=>{});}else if(!state.playing){if(!audio.paused)audio.pause();}
 }
 });
 function updateQueueTrackInfo(st){
 const np=document.getElementById('queue-now-playing'),pt=document.getElementById('queue-prev-track');
-if(st.trackName&&st.trackUrl){np.style.display='flex';document.getElementById('qnp-title').textContent=st.trackName||'—';document.getElementById('qnp-artist').textContent=st.trackArtist||'—';const nc=document.getElementById('qnp-cover');if(st.trackCover){nc.src=st.trackCover;nc.style.display='block';}else nc.style.display='none';}else np.style.display='none';
+if(st.trackName!==undefined){if(st.trackName&&st.trackUrl){np.style.display='flex';document.getElementById('qnp-title').textContent=st.trackName||'—';document.getElementById('qnp-artist').textContent=st.trackArtist||'—';const nc=document.getElementById('qnp-cover');if(st.trackCover){nc.src=st.trackCover;nc.style.display='block';}else nc.style.display='none';}else np.style.display='none';}
 const pr=st.prevTrack;
 if(pr&&(pr.trackName||pr.title)){pt.style.display='flex';document.getElementById('qpt-title').textContent=pr.trackName||pr.title||'—';let pa='';if(pr.trackArtist&&typeof pr.trackArtist==='object')pa=pr.trackArtist.name||'';else if(pr.artist&&typeof pr.artist==='object')pa=pr.artist.name||'';else pa=pr.trackArtist||pr.artist||'?';document.getElementById('qpt-artist').textContent=pa;const pc=document.getElementById('qpt-cover');const cu=pr.trackCover||pr.cover||'';if(cu){pc.src=cu;pc.style.display='block';}else pc.style.display='none';}else pt.style.display='none';
 }
@@ -78,9 +81,9 @@ const btn=document.querySelector('#search-panel input[type="text"]');const origP
 const pagDiv=document.getElementById('pagination');const localTags=['#скачанное','#full','#скаченное','#downloaded'];const lowerQuery=query.toLowerCase();let matchedTag=null;
 for(const tag of localTags){if(lowerQuery.startsWith(tag)){matchedTag=tag;break;}}
 try{
-if(matchedTag){isLocalSearch=true;localPage=page;localFilter=query.substring(matchedTag.length).trim();const params=new URLSearchParams({page:String(page)});// ЗАМОРОЖЕНО: if(myNickname)params.set('owner',myNickname);
+if(matchedTag){isLocalSearch=true;localPage=page;localFilter=query.substring(matchedTag.length).trim();const params=new URLSearchParams({page:String(page)});if(myNickname)params.set('owner',myNickname);if(currentRoomCode)params.set('room',currentRoomCode);
 if(localFilter)params.set('filter',localFilter);const res=await fetch(`/api/local-tracks?${params}`);const data=await res.json();searchResults=data.data||[];localPages=data.pages||0;if(!searchResults.length){document.getElementById('results').innerHTML=localFilter?`<div style="padding:20px;color:var(--sub)">${translate('nothing_found_filter',{filter:escapeHtml(localFilter)})}</div>`:`<div style="padding:20px;color:var(--sub)">${escapeHtml(translate('no_local_tracks'))}</div>`;pagDiv.style.display='none';return;}renderSearchResults();renderPagination(data.page,data.pages);}
-else{isLocalSearch=false;localPage=1;localFilter='';const params=new URLSearchParams({q:query,page:String(page)});// ЗАМОРОЖЕНО: if(myNickname)params.set('owner',myNickname);
+else{isLocalSearch=false;localPage=1;localFilter='';const params=new URLSearchParams({q:query,page:String(page)});if(myNickname)params.set('owner',myNickname);if(currentRoomCode)params.set('room',currentRoomCode);
 const res=await fetch(`/api/search?${params}`);const data=await res.json();if(!data.data?.length){document.getElementById('results').innerHTML=`<div style="padding:20px;color:var(--sub)">${escapeHtml(translate('nothing_found'))}</div>`;searchResults=[];pagDiv.style.display='none';return;}searchResults=data.data;renderSearchResults();renderPagination(data.page,data.pages);}
 }catch(e){console.error(e);showToast(translate('search_error'),true);}finally{btn.disabled=false;btn.placeholder=origPh;}
 }

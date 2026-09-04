@@ -9,18 +9,17 @@ async function toggleVoiceConnection(){if(isLeaving)return;if(isInVoice)await le
 async function leaveVoiceChat(){
 if(isLeaving)return;
 isLeaving=true;
-if(myVideoEnabled)await toggleVideo();
-if(myScreenEnabled)await toggleScreen();
 isInVoice=false;forceMuted=false;forceDeafened=false;isMuted=false;isDeafened=false;
 updateVoiceEntryButton();updateVoiceControlsInPlayer();stopSelfSpeakingDetection();
 try{socket.emit('leave-voice');}catch(e){}
 Object.keys(currentCalls).forEach(p=>{try{const c=currentCalls[p];if(c._audioElement){c._audioElement.pause();c._audioElement.srcObject=null;c._audioElement.remove();}if(c._gainNode)c._gainNode.disconnect();if(c._sourceNode)c._sourceNode.disconnect();if(c._shaperNode)c._shaperNode.disconnect();c.close();stopSpeakingDetection(p);}catch(e){}});
 currentCalls={};
-if(peer){try{peer.destroy();}catch(e){}peer=null;}
+if(peer&&!myVideoEnabled&&!myScreenEnabled){try{peer.destroy();}catch(e){}peer=null;myPeerId=null;}
+else if(peer&&myPeerId){socket.emit('register-peer-id',myPeerId);}
 if(myStream){try{myStream.getTracks().forEach(t=>{t.stop();t.enabled=false;});}catch(e){}myStream=null;}
-myPeerId=null;isLeaving=false;
-allUsersWithVideo={};allUsersWithScreen={};videoWindows={};screenWindows={};
-updateMediaUsersList();
+if(!peer)myPeerId=null;
+voiceUsers.delete(mySocketId);if(lastUsersList)renderUsersList(lastUsersList);
+isLeaving=false;
 }
 async function joinVoiceChat(){
 if(!voiceChatEnabled){showToast(translate('voice_disabled'),true);return;}
@@ -31,10 +30,17 @@ try{
 const co={audio:selectedMicId?{deviceId:{exact:selectedMicId}}:true,video:false};
 myStream=await navigator.mediaDevices.getUserMedia(co);
 startSelfSpeakingDetection(myStream);
+if(!peer){
 peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});
-peer.on('open',pid=>{myPeerId=pid;isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;socket.emit('register-peer-id',pid);updateVoiceEntryButton();updateVoiceControlsInPlayer();socket.emit('join-voice');showToast(translate('connected'));});
 peer.on('call',handleIncomingCall);
 peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);leaveVoiceChat();});
+await new Promise(res=>{peer.on('open',res);});
+myPeerId=peer.id;socket.emit('register-peer-id',myPeerId);
+}
+isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;
+myPeerId=peer.id;socket.emit('register-peer-id',myPeerId);
+updateVoiceEntryButton();updateVoiceControlsInPlayer();
+socket.emit('join-voice');voiceUsers.add(mySocketId);showToast(translate('connected'));
 }catch(e){let m=e.message;if(e.name==='NotAllowedError')m=translate('mic_denied');else if(e.name==='NotFoundError')m=translate('mic_not_found');else if(e.name==='SecurityError')m=translate('need_https');showToast(m,true);eb.disabled=false;updateVoiceEntryButton();}
 }
 function handleIncomingCall(call){
@@ -69,10 +75,18 @@ if(call.metadata){const tabId=call.metadata.tabId||'unknown';const uniqueKey=pee
 call.on('stream',stream=>{screenStreams[peerId]=stream;const uniqueKey=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uniqueKey&&screenWindows[uniqueKey]){const video=screenWindows[uniqueKey].querySelector('video');if(video)video.srcObject=stream;}updateMediaUsersList();});
 call.on('close',()=>{delete screenCalls[peerId];delete screenStreams[peerId];const uniqueKey=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uniqueKey){delete screenUserInfo[uniqueKey];delete allUsersWithScreen[uniqueKey];if(screenWindows[uniqueKey])closeScreenWindow(uniqueKey);}updateMediaUsersList();});
 }
+socket.on('media-requested',({requesterSocketId,type})=>{
+if(!peer)return;
+const pid=socketToPeer[requesterSocketId];if(!pid)return;
+if(type==='video'&&myVideoEnabled&&myVideoStream){const c=peer.call(pid,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(c);}
+else if(type==='screen'&&myScreenEnabled&&myScreenStream){const c=peer.call(pid,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(c);}
+});
 socket.on('user-joined-voice',({id,peerId})=>{
 if(!isInVoice||!peer||!peerId||peerId===myPeerId)return;
 socketToPeer[id]=peerId;peerToSocket[peerId]=id;
 if(!currentCalls[peerId]){const call=peer.call(peerId,myStream);handleAudioCall(call);}
+if(myVideoEnabled&&myVideoStream){const vc=peer.call(peerId,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(vc);}
+if(myScreenEnabled&&myScreenStream){const sc=peer.call(peerId,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(sc);}
 setTimeout(()=>updateMediaUsersList(),500);
 });
 socket.on('user-left-voice',({id,peerId})=>{const tp=peerId||socketToPeer[id];if(id)delete socketToPeer[id];if(tp)delete peerToSocket[tp];if(currentCalls[tp]){try{if(currentCalls[tp]._audioElement){currentCalls[tp]._audioElement.pause();currentCalls[tp]._audioElement.remove();}if(currentCalls[tp]._gainNode)currentCalls[tp]._gainNode.disconnect();if(currentCalls[tp]._sourceNode)currentCalls[tp]._sourceNode.disconnect();if(currentCalls[tp]._shaperNode)currentCalls[tp]._shaperNode.disconnect();currentCalls[tp].close();}catch(e){}stopSpeakingDetection(tp);delete currentCalls[tp];}if(videoCalls[tp]){try{videoCalls[tp].close();}catch(e){}delete videoCalls[tp];delete videoStreams[tp];const uk=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===tp);if(uk){delete videoUserInfo[uk];delete allUsersWithVideo[uk];if(videoWindows[uk])closeVideoWindow(uk);}}if(screenCalls[tp]){try{screenCalls[tp].close();}catch(e){}delete screenCalls[tp];delete screenStreams[tp];const uk=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===tp);if(uk){delete screenUserInfo[uk];delete allUsersWithScreen[uk];if(screenWindows[uk])closeScreenWindow(uk);}}updateMediaUsersList();});
@@ -202,7 +216,8 @@ const resize=document.createElement('div');resize.className='video-window-resize
 win.appendChild(header);win.appendChild(video);win.appendChild(resize);
 if(isSelf){const ind=document.createElement('div');ind.className='video-self-indicator';ind.textContent='Вы';win.appendChild(ind);}
 document.body.appendChild(win);videoWindows[uniqueKey]=win;
-if(isSelf){if(myVideoStream)video.srcObject=myVideoStream;}else{if(videoStreams[peerId])video.srcObject=videoStreams[peerId];}
+if(isSelf){if(myVideoStream)video.srcObject=myVideoStream;}else{if(videoStreams[peerId])video.srcObject=videoStreams[peerId];else{const ui=videoUserInfo[uniqueKey];if(ui&&ui.userId)socket.emit('request-media',{userId:ui.userId,type:'video'});}}
+video.play().catch(()=>{});
 makeVideoDraggable(win,header);makeVideoResizable(win,resize);
 }
 function openScreenWindow(uniqueKey,userName,isSelf,peerId){
@@ -218,7 +233,8 @@ const resize=document.createElement('div');resize.className='video-window-resize
 win.appendChild(header);win.appendChild(video);win.appendChild(resize);
 if(isSelf){const ind=document.createElement('div');ind.className='screen-indicator';ind.textContent='Ваш экран';win.appendChild(ind);}
 document.body.appendChild(win);screenWindows[uniqueKey]=win;
-if(isSelf){if(myScreenStream)video.srcObject=myScreenStream;}else{if(screenStreams[peerId])video.srcObject=screenStreams[peerId];}
+if(isSelf){if(myScreenStream)video.srcObject=myScreenStream;}else{if(screenStreams[peerId])video.srcObject=screenStreams[peerId];else{const ui=screenUserInfo[uniqueKey];if(ui&&ui.userId)socket.emit('request-media',{userId:ui.userId,type:'screen'});}}
+video.play().catch(()=>{});
 makeVideoDraggable(win,header);makeVideoResizable(win,resize);
 }
 function closeVideoWindow(uniqueKey){if(videoWindows[uniqueKey]){videoWindows[uniqueKey].remove();delete videoWindows[uniqueKey];updateMediaUsersList();}}

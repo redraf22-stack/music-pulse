@@ -30,6 +30,7 @@ const server = config.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] }, maxHttpBufferSize: 10 * 1024 * 1024 });
 try { if (config.IS_HTTPS) PeerServer({ port: 3002, path: '/peerjs', debug: false, ssl: { key: fs.readFileSync(config.KEY_PATH), cert: fs.readFileSync(config.CERT_PATH) } }); else PeerServer({ port: 3002, path: '/peerjs', debug: false }); } catch (e) { console.warn('PeerServer failed:', e.message); }
 const roomsApi = require('./rooms.js')(io, utils);
+require('./routes.js').setRooms(roomsApi.rooms);
 require('./sockets.js')(io, roomsApi, utils);
 require('./lan.js')({ port: config.PORT, https: config.IS_HTTPS }, () => Object.keys(roomsApi.rooms).filter(c => roomsApi.rooms[c].lanOpen).map(c => ({ code: c, name: (roomsApi.rooms[c].users.find(u => u.isAdmin) || {}).name || 'MusicPulse', users: roomsApi.rooms[c].users.length })));
 setInterval(() => { try { fs.readdirSync(uploadsDir).forEach(f => { const fp = path.join(uploadsDir, f); const st = fs.statSync(fp); if (Date.now() - st.mtimeMs > 7 * 24 * 60 * 60 * 1000) { fs.unlinkSync(fp); } }); } catch (e) {} }, 24 * 60 * 60 * 1000);

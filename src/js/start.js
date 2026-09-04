@@ -3,7 +3,6 @@
 const nickInput=document.getElementById('nickname');
 const codeInput=document.getElementById('room-code');
 
-// Ник запоминается на устройстве
 const savedNick=localStorage.getItem('mp_nickname')||'';
 if(savedNick)nickInput.value=savedNick;
 try{
@@ -12,20 +11,23 @@ const urlNick=(params.get('nick')||'').trim();
 if(urlNick){nickInput.value=urlNick;localStorage.setItem('mp_nickname',urlNick);}
 }catch(e){}
 function saveNick(){const n=nickInput.value.trim();if(n)localStorage.setItem('mp_nickname',n);return n;}
+function currentLang(){return localStorage.getItem('syncmusic_lang')||'ru';}
 function showStatus(m,isErr){const el=document.getElementById('status');if(!el)return;el.textContent=m;el.className='status '+(isErr?'error':'ok');}
 window.showStatus=showStatus;
 
-// ✅ ОДНА кнопка создания: в Electron сама запускает сервер
+// ✅ Создание комнаты (Electron + язык)
 window.createRoom=function(){
-const n=saveNick();
-if(!n)return showAlert('⚠️',translate('err_title'),translate('nickname_ph'));
-nickAC.addToHistory(n);
-if(window.electronAPI){
-showStatus('⏳ Запуск сервера...',false);
-window.electronAPI.startServerAndCreate(n).then(function(r){if(r&&!r.success)showStatus('Ошибка: '+(r.error||'неизвестная'),true);});
-}else{
-window.location.href='/room?mode=create&nick='+encodeURIComponent(n);
-}
+    const n=saveNick();
+    if(!n)return showAlert('⚠️',translate('err_title'),translate('nickname_ph'));
+    nickAC.addToHistory(n);
+    if(window.electronAPI){
+        showStatus(translate('connecting'),false);
+        window.electronAPI.startServerAndCreate(n,currentLang()).then(function(r){
+            if(r&&!r.success)showStatus('Ошибка: '+(r.error||'неизвестная'),true);
+        });
+    }else{
+        window.location.href='/room?mode=create&nick='+encodeURIComponent(n)+'&lang='+encodeURIComponent(currentLang());
+    }
 };
 
 // Веб-вход по коду (вне приложения)
@@ -35,7 +37,7 @@ const c=codeInput.value.trim().toUpperCase();
 if(!n)return showAlert('⚠️',translate('err_title'),translate('nickname_ph'));
 if(!c)return showAlert('⚠️',translate('err_title'),translate('room_code_ph'));
 nickAC.addToHistory(n);
-window.location.href='/room?mode=join&code='+encodeURIComponent(c)+'&nick='+encodeURIComponent(n);
+window.location.href='/room?mode=join&code='+encodeURIComponent(c)+'&nick='+encodeURIComponent(n)+'&lang='+encodeURIComponent(currentLang());
 };
 nickInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();createRoom();}});
 codeInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();joinRoom();}});
@@ -55,13 +57,13 @@ if(!flat.length){list.innerHTML='<div class="empty-state">'+escapeHtml(translate
 flat.forEach(function(item){
 const el=document.createElement('div');el.className='server-item';
 el.innerHTML='<div class="server-info"><div class="server-status"></div><div><div class="server-name">'+escapeHtml(item.room.name)+' • '+escapeHtml(String(item.room.code))+'</div><div class="server-ip">'+escapeHtml(item.ip+':'+item.port)+' • '+escapeHtml(String(item.room.users||0))+' чел.</div></div></div><span>→</span>';
-el.onclick=function(){const n=saveNick();window.electronAPI.connectToServer({ip:item.ip,port:item.port,https:item.https,roomCode:String(item.room.code),nick:n});};
+el.onclick=function(){const n=saveNick();window.electronAPI.connectToServer({ip:item.ip,port:item.port,https:item.https,roomCode:String(item.room.code),nick:n,lang:currentLang()});};
 list.appendChild(el);
 });
 }
 window.electronAPI.onServersFound(function(ls){found=ls||[];renderList();});
 
-// Прямое подключение: ОДНО поле IP:код (как в майне)
+// Прямое подключение
 window.connectManual=function(){
 const v=document.getElementById('manual-addr').value.trim();
 const parts=v.split(':');
@@ -71,7 +73,7 @@ if(!ip||!second){showStatus(translate('enter_ip'),true);return;}
 let port=3001,roomCode='';
 if(/^\d{5}$/.test(second)){roomCode=second;}else{port=parseInt(second,10)||3001;}
 const n=saveNick();
-window.electronAPI.connectToServer({ip:ip,port:port,https:document.getElementById('manual-https').checked,roomCode:roomCode,nick:n});
+window.electronAPI.connectToServer({ip:ip,port:port,https:document.getElementById('manual-https').checked,roomCode:roomCode,nick:n,lang:currentLang()});
 };
 }
 
@@ -81,31 +83,27 @@ applyTranslations();
 // ===== ВЫБОР ПАПКИ С МУЗЫКОЙ =====
 async function loadMusicDir() {
     try {
-        const r = await fetch('/api/music-dir');
-        const d = await r.json();
+        let dir = '';
+        if (window.electronAPI && window.electronAPI.getMusicDir) dir = await window.electronAPI.getMusicDir();
+        else { const r = await fetch('/api/music-dir'); dir = (await r.json()).dir || ''; }
         const inp = document.getElementById('music-dir-input');
-        if (inp && d.dir) inp.value = d.dir;
+        if (inp && dir) inp.value = dir;
     } catch (e) {}
 }
 
 async function pickMusicDir() {
-    if (!window.electronAPI || !window.electronAPI.selectFolder) {
-        showToast('Выбор папки доступен только в приложении', true);
-        return;
-    }
+    if (!window.electronAPI || !window.electronAPI.selectFolder) { showToast('Выбор папки доступен только в приложении', true); return; }
     const dir = await window.electronAPI.selectFolder();
     if (!dir) return;
     try {
-        const r = await fetch('/api/music-dir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dir }) });
-        const d = await r.json();
-        if (d.success) {
-            document.getElementById('music-dir-input').value = d.dir;
-            showToast('📁 Папка изменена');
-        } else showToast(d.error || 'Ошибка', true);
+        let ok = false;
+        if (window.electronAPI.setMusicDir) { const r = await window.electronAPI.setMusicDir(dir); ok = !!(r && r.success); }
+        else { const r = await fetch('/api/music-dir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dir }) }); ok = (await r.json()).success; }
+        if (ok) { document.getElementById('music-dir-input').value = dir; showToast('📁 Папка сохранена'); }
+        else showToast('Ошибка сохранения', true);
     } catch (e) { showToast('Ошибка сохранения', true); }
 }
 
-// Загружаем текущую папку при открытии настроек
 const origOpenSettings = window.openSettings;
 window.openSettings = function() {
     origOpenSettings();

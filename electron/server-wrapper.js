@@ -1,3 +1,10 @@
+const { app } = require('electron');
+
+// ✅ Данные (сертификаты, загрузки, настройки) — ВНЕ asar, в папке пользователя
+if (app && !process.env.MUSICPULSE_DATA) {
+    process.env.MUSICPULSE_DATA = app.getPath('userData');
+}
+
 function startServer(port) {
     return new Promise((resolve, reject) => {
         try {

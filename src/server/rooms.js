@@ -1,4 +1,5 @@
 module.exports = function (io, utils) {
+    const PL = require('./playlists.js');
     const rooms = {};
     function broadcastUsers(code) { if (rooms[code]) io.to(code).emit('users-update', rooms[code].users.map(u => { const s = io.sockets.sockets.get(u.id); return { ...u, voiceState: rooms[code].voiceStates[u.id] || null, peerId: s?.peerId || null }; })); }
     function broadcastQueue(code) { if (rooms[code]) io.to(code).emit('queue-update', rooms[code].queue); }
@@ -7,23 +8,22 @@ module.exports = function (io, utils) {
         const nt = utils.normalizeTrack(track); if (!nt) return;
         const orig = nt.preview; let url = orig;
         if (!nt.isLocal && orig && orig.includes('dzcdn.net')) url = `/proxy?url=${encodeURIComponent(orig)}`;
-        url = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
         const prev = (room.playHistory && room.playHistory.length) ? room.playHistory[room.playHistory.length - 1] : null;
         room.state = { ...room.state, trackName: nt.title, trackArtist: nt.artist.name, trackCover: nt.cover, trackUrl: url, originalPreview: orig, isLocal: nt.isLocal, playing: true, currentTime: 0, startedAt: Date.now(), prevTrack: prev };
         io.to(code).emit('sync', { ...room.state, playHistory: room.playHistory || [] });
     }
     function hasRandomInQueue(r) { return r.queue.some(t => (t.suggestedBy || '').includes('Рандом')); }
     async function getRandomTrackForRoom(code) {
-        const all = await utils.getLocalTracks(); if (!all.length) return null;
         const room = rooms[code]; if (!room) return null;
-        let hist = room.randomHistory || [];
-        let avail = all.filter(t => !hist.includes(t.filename));
-        if (!avail.length) { avail = all; room.randomHistory = []; }
-        const t = avail[Math.floor(Math.random() * avail.length)];
-        room.randomHistory.push(t.filename);
-        const maxH = Math.max(1, Math.floor(all.length * 0.8));
-        if (room.randomHistory.length > maxH) room.randomHistory.shift();
-        return utils.normalizeTrack({ title: t.title, artist: t.artist, cover: await utils.findCover(t.title, t.artist), preview: '/music/' + encodeURIComponent(t.filename), isLocal: true, duration: Math.floor(t.duration || 30) });
+       const all = await PL.resolveTracks(room, true);
+       if (!all.length) return null;
+      let hist = room.randomHistory || [];
+      let avail = all.filter(t => !hist.includes(t.key));
+      if (!avail.length) { avail = all; room.randomHistory = []; }
+     const t = avail[Math.floor(Math.random() * avail.length)];
+     room.randomHistory.push(t.key);
+     if (room.randomHistory.length > Math.max(1, Math.floor(all.length * 0.8))) room.randomHistory.shift();
+      return utils.normalizeTrack(t);
     }
     async function addRandomToQueueEnd(room) {
         try {
