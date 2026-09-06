@@ -78,7 +78,6 @@ const btn=document.getElementById('video-toggle-btn');
 if(myVideoEnabled){
 myVideoEnabled=false;btn.classList.remove('active');btn.innerHTML='📷 Включить видеосвязь';
 if(myVideoStream){myVideoStream.getTracks().forEach(t=>t.stop());myVideoStream=null;}
-Object.keys(videoCalls).forEach(pid=>{try{videoCalls[pid].close();}catch(e){}});videoCalls={};
 socket.emit('toggle-video',false,TAB_ID);
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 delete allUsersWithVideo[myUniqueKey];
@@ -91,6 +90,7 @@ const constraints={video:selectedCameraId?{deviceId:{exact:selectedCameraId}}:tr
 myVideoStream=await navigator.mediaDevices.getUserMedia(constraints);myVideoEnabled=true;
 btn.classList.add('active');btn.innerHTML='📷 Выключить видеосвязь';
 socket.emit('toggle-video',true,TAB_ID);
+Object.keys(allUsersWithVideo).forEach(k=>{const u=allUsersWithVideo[k];if(u.peerId&&u.peerId!==myPeerId&&!videoCalls[u.peerId]){const call=peer.call(u.peerId,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}});
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 allUsersWithVideo[myUniqueKey]={userId:mySocketId,userName:myNickname,peerId:myPeerId,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,isSelf:true,tabId:TAB_ID};
 Object.keys(currentCalls).forEach(pid=>{if(pid!==myPeerId){const call=peer.call(pid,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}});
@@ -104,7 +104,6 @@ const btn=document.getElementById('screen-toggle-btn');
 if(myScreenEnabled){
 myScreenEnabled=false;btn.classList.remove('active');btn.innerHTML='📺 Транслировать экран';
 if(myScreenStream){myScreenStream.getTracks().forEach(t=>t.stop());myScreenStream=null;}
-Object.keys(screenCalls).forEach(pid=>{try{screenCalls[pid].close();}catch(e){}});screenCalls={};
 socket.emit('toggle-screen',false,TAB_ID);
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 delete allUsersWithScreen[myUniqueKey];
@@ -118,9 +117,12 @@ myScreenEnabled=true;
 btn.classList.add('active');btn.innerHTML='📺 Остановить трансляцию';
 myScreenStream.getVideoTracks()[0].onended=()=>{toggleScreen();};
 socket.emit('toggle-screen',true,TAB_ID);
+Object.keys(allUsersWithScreen).forEach(k=>{const u=allUsersWithScreen[k];if(u.peerId&&u.peerId!==myPeerId&&!screenCalls[u.peerId]){const call=peer.call(u.peerId,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}});
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 allUsersWithScreen[myUniqueKey]={userId:mySocketId,userName:myNickname,peerId:myPeerId,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,isSelf:true,tabId:TAB_ID};
 Object.keys(currentCalls).forEach(pid=>{if(pid!==myPeerId){const call=peer.call(pid,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}});
+Object.keys(allUsersWithVideo).forEach(k=>{const u=allUsersWithVideo[k];if((id&&u.userId===id)||(tp&&u.peerId===tp)){delete allUsersWithVideo[k];if(videoWindows[k])closeVideoWindow(k);}});
+Object.keys(allUsersWithScreen).forEach(k=>{const u=allUsersWithScreen[k];if((id&&u.userId===id)||(tp&&u.peerId===tp)){delete allUsersWithScreen[k];if(screenWindows[k])closeScreenWindow(k);}});
 updateMediaUsersList();
 showToast('📺 Трансляция экрана включена');
 }catch(e){showToast('Не удалось начать трансляцию: '+e.message,true);}
@@ -131,7 +133,7 @@ if(userId===mySocketId&&tabId===TAB_ID)return;
 const uniqueKey=peerId+'_'+(tabId||'unknown');
 if(enabled){
 allUsersWithVideo[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
-if(myVideoEnabled&&peer&&!videoCalls[peerId]){const call=peer.call(peerId,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}
+if(peer&&!videoCalls[peerId]){const call=peer.call(peerId,myVideoStream||new MediaStream(),{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}
 }else{
 delete allUsersWithVideo[uniqueKey];
 if(videoCalls[peerId]){try{videoCalls[peerId].close();}catch(e){}delete videoCalls[peerId];delete videoStreams[peerId];const uk=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===peerId);if(uk){delete videoUserInfo[uk];if(videoWindows[uk])closeVideoWindow(uk);}}
@@ -143,7 +145,7 @@ if(userId===mySocketId&&tabId===TAB_ID)return;
 const uniqueKey=peerId+'_'+(tabId||'unknown');
 if(enabled){
 allUsersWithScreen[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
-if(myScreenEnabled&&peer&&!screenCalls[peerId]){const call=peer.call(peerId,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}
+if(peer&&!screenCalls[peerId]){const call=peer.call(peerId,myScreenStream||new MediaStream(),{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}
 }else{
 delete allUsersWithScreen[uniqueKey];
 if(screenCalls[peerId]){try{screenCalls[peerId].close();}catch(e){}delete screenCalls[peerId];delete screenStreams[peerId];const uk=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uk){delete screenUserInfo[uk];if(screenWindows[uk])closeScreenWindow(uk);}}

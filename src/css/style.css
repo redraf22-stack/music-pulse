@@ -363,3 +363,5 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:5px;top:
 .player-bar .master-volume-wrap{grid-column:3;justify-self:end;}
 .playlist-view-modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;z-index:1000;}
 .playlist-view-modal.open{display:flex;}
+.plv-box{width:560px;max-width:92vw;background:#1e1e1e;border:1px solid #3a3a3a;border-radius:14px;padding:22px;position:relative;display:flex;flex-direction:column;max-height:80vh;box-shadow:0 12px 40px rgba(0,0,0,0.6);}
+.plv-content{overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:8px;}

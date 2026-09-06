@@ -31,6 +31,8 @@ module.exports = function (io, R, utils) {
             if (reAdm) { exAdm.id = socket.id; room.adminId = socket.id; room.adminDisconnectedAt = null; }
             else room.users.push({ id: socket.id, name, isAdmin: false, isMod: false, isVip: false });
             R.broadcastUsers(socket.roomCode); R.broadcastQueue(socket.roomCode);
+            delete room.voiceStates[socket.id];
+            Object.keys(room.voiceStates).forEach(k => { if (!room.users.some(u => u.id === k)) delete room.voiceStates[k]; });
             const st = { ...room.state, playHistory: room.playHistory || [] };
             if (st.playing && st.startedAt) st.currentTime = (Date.now() - st.startedAt) / 1000;
             socket.emit('sync', st);
