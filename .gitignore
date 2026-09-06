@@ -12,6 +12,7 @@ data/
 uploads/
 music/
 urlcache/
+src/server/url-tracks.json
 
 # Билды и логи
 dist/
