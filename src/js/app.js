@@ -45,7 +45,7 @@ document.getElementById('vote-duration-input').value=voteDuration;
 updateVoiceToggleButton();updateLanButton();
 isReady=true;restorePlayerBar();
 }
-else{document.getElementById('admin-controls').style.display='none';showReadyButton();startCooldownTimer();}
+else{document.getElementById('admin-controls').style.display='none';if(window.electronAPI){isReady=true;restorePlayerBar();}else{showReadyButton();}startCooldownTimer();}
 updateVoiceEntryButton();updateManageBtnVisibility();updateRegenBtnVisibility();updateRandomButtonVisibility();
 socket.emit('get-active-streams');
 socket.emit('get-playlists');

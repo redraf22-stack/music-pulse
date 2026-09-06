@@ -6,6 +6,7 @@ module.exports = function (io, R, utils) {
         const clientIp = socket.handshake.address; socket.clientIp = clientIp;
         socket.onAny(() => { socket.lastActivity = Date.now(); });
         socket.on('ping-server', cb => { if (typeof cb === 'function') cb(); });
+        socket.on('time-sync', (t0, cb) => { if (typeof cb === 'function') cb(Date.now()); });
         socket.on('heartbeat', () => { socket.lastActivity = Date.now(); socket.emit('heartbeat-ack'); });
         socket.on('register-peer-id', p => { socket.peerId = p; });
         socket.on('create-room', (nickname, cb) => {
@@ -138,13 +139,15 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
         socket.on('toggle-random-mode', async () => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.randomMode = !room.randomMode; io.to(socket.roomCode).emit('random-mode-update', room.randomMode); if (room.randomMode) { room.queue = room.queue.filter(t => !(t.suggestedBy || '').includes('Рандом')); R.broadcastQueue(socket.roomCode); if (!room.state.playing || !room.state.trackUrl) { const tr = await R.getRandomTrackForRoom(socket.roomCode); if (tr) R.playTrackInRoom(socket.roomCode, room, tr); } if (!R.hasRandomInQueue(room)) R.addRandomToQueueEnd(room); } });
         socket.on('seek', time => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.state.currentTime = time; if (room.state.playing) room.state.startedAt = Date.now() - time * 1000; io.to(socket.roomCode).emit('sync', { ...room.state, playHistory: room.playHistory || [], isSeek: true }); });
         socket.on('update-state', ns => {
-            if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return;
-            const room = rooms[socket.roomCode]; if (!room) return;
-            room.state = { ...room.state, ...ns };
-            if (ns.playing === true && typeof ns.currentTime === 'number') room.state.startedAt = Date.now() - ns.currentTime * 1000;
-            if (ns.playing === false) room.state.startedAt = null;
-            io.to(socket.roomCode).emit('sync', { ...room.state, playHistory: room.playHistory || [] });
-        });
+    if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return;
+    const room = rooms[socket.roomCode]; if (!room) return;
+    room.state = { ...room.state, ...ns };
+    if (ns.playing === true && typeof ns.currentTime === 'number') {
+        room.state.startedAt = Date.now() - ns.currentTime * 1000;
+    }
+    if (ns.playing === false) room.state.startedAt = null;
+    io.to(socket.roomCode).emit('sync', { ...room.state, playHistory: room.playHistory || [] });
+});
         socket.on('send-chat-message', text => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const ct = String(text || '').trim().substring(0, 500); if (!ct) return; const msg = { id: Date.now().toString() + Math.random().toString(36).substr(2, 4), userId: socket.id, userName: socket.nickname || 'Аноним', isAdmin: !!socket.isAdmin, isMod: !!socket.isMod, isVip: !!socket.isVip, text: ct, timestamp: Date.now() }; room.chatMessages.push(msg); if (room.chatMessages.length > 200) room.chatMessages.shift(); io.to(socket.roomCode).emit('chat-message', msg); });
         socket.on('send-chat-media', data => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const { type, fileUrl, fileName, fileSize, text } = data || {}; if (!type || !fileUrl) return; const msg = { id: Date.now().toString() + Math.random().toString(36).substr(2, 4), userId: socket.id, userName: socket.nickname || 'Аноним', isAdmin: !!socket.isAdmin, isMod: !!socket.isMod, isVip: !!socket.isVip, text: String(text || '').trim().substring(0, 500), mediaType: type, fileUrl, fileName: fileName || 'file', fileSize: fileSize || 0, timestamp: Date.now() }; room.chatMessages.push(msg); if (room.chatMessages.length > 200) room.chatMessages.shift(); io.to(socket.roomCode).emit('chat-message', msg); });
         socket.on('get-active-streams', () => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const as = []; room.users.forEach(u => { const s = io.sockets.sockets.get(u.id); if (room.voiceStates[u.id]?.videoEnabled) as.push({ type: 'video', userId: u.id, userName: u.name, peerId: s?.peerId || null, isAdmin: u.isAdmin, isMod: u.isMod, isVip: u.isVip, tabId: s?.tabId || 'unknown' }); if (room.voiceStates[u.id]?.screenEnabled) as.push({ type: 'screen', userId: u.id, userName: u.name, peerId: s?.peerId || null, isAdmin: u.isAdmin, isMod: u.isMod, isVip: u.isVip, tabId: s?.tabId || 'unknown' }); }); socket.emit('active-streams', as); });

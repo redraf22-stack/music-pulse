@@ -1,3 +1,13 @@
+let serverTimeOffset=0;
+function measureServerOffset(){
+if(!socket||!socket.connected)return;
+const t0=Date.now();
+socket.emit('time-sync',t0,function(serverNow){
+const t1=Date.now();
+serverTimeOffset=serverNow-(t0+(t1-t0)/2);
+});
+}
+setInterval(measureServerOffset,15000);measureServerOffset();
 // ===== ПЛЕЕР, ПОИСК, ОЧЕРЕДЬ, ГОЛОСОВАНИЯ =====
 const SVG_PLAY='<svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
 const SVG_PAUSE='<svg width="16" height="16" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>';
@@ -50,7 +60,7 @@ const urlChanged=ns&&audio.src!==ns;
 if(ns&&(urlChanged||identityChanged)){
 trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';
 audio.pause();audio.src=ns;audio.load();
-const onReady=()=>{if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
+const onReady=()=>{if(audio.readyState<2){setTimeout(onReady,100);return;}if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
 audio.addEventListener('canplay',onReady,{once:true});
 audio.addEventListener('loadedmetadata',onReady,{once:true});
 setTimeout(()=>{if(trackChanging)onReady();},3000);
@@ -58,8 +68,7 @@ return;
 }
 if(!trackChanging&&state.trackUrl){
 if(state.isSeek&&audio.readyState>=2){audio.currentTime=state.currentTime;lastSyncTime=Date.now();}
-else if(!isSeeking&&Date.now()-trackLoadedAt>5000){
-const expected=(state.playing&&state.startedAt)?(Date.now()-state.startedAt)/1000:(state.currentTime||0);
+const expected=(state.playing&&state.startedAt)?(Date.now()+serverTimeOffset-state.startedAt)/1000:(state.currentTime||0);
 if(expected>=0&&(!audio.duration||expected<=audio.duration)){
 const diff=Math.abs(audio.currentTime-expected);
 if(diff>1.5&&audio.readyState>=2){audio.currentTime=expected;}
@@ -67,7 +76,6 @@ if(diff>1.5&&audio.readyState>=2){audio.currentTime=expected;}
 }
 lastSyncTime=Date.now();
 if(state.playing&&isReady){if(audio.paused&&!audio.ended)audio.play().catch(()=>{});}else if(!state.playing){if(!audio.paused)audio.pause();}
-}
 });
 function updateQueueTrackInfo(st){
 const np=document.getElementById('queue-now-playing'),pt=document.getElementById('queue-prev-track');

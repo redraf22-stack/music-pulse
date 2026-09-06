@@ -1,6 +1,11 @@
 // ===== ОБЩИЕ ПОМОЩНИКИ =====
 function escapeHtml(t){if(t===null||t===undefined)return'';return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
-function volumeToGain(v){return parseFloat(v)*2;}
+function volumeToGain(v){
+    v = parseFloat(v);
+    if (v <= 0) return 0;
+    if (v <= 1) return v;
+    return Math.pow(v, 1.5);
+}
 function makeSoftClipCurve(){const s=512,c=new Float32Array(s);for(let i=0;i<s;i++){const x=(i/(s-1))*2-1;c[i]=Math.tanh(x*2);}return c;}
 function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/(1024*1024)).toFixed(2)+' MB';}
 function formatTime(s){if(!s||isNaN(s))return'0:00';return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}

@@ -1,8 +1,36 @@
+# Зависимости
 node_modules/
-dist/
+
+# Сертификаты (КРИТИЧНО — не коммитить ключи!)
 *.pem
-src/music/*
-!src/music/.gitkeep
-src/uploads/
-src/urlcache/
-src/server/url-tracks.json
+*.key
+*.crt
+
+# Данные пользователя
+settings.json
+data/
+uploads/
+music/
+urlcache/
+
+# Билды и логи
+dist/
+release/
+build/*.exe
+build/*.zip
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Electron
+out/
+
+# Переменные окружения (если появятся)
+.env
+.env.local

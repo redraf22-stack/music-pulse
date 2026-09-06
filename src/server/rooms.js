@@ -1,7 +1,7 @@
 module.exports = function (io, utils) {
     const PL = require('./playlists.js');
     const rooms = {};
-    function broadcastUsers(code) { if (rooms[code]) io.to(code).emit('users-update', rooms[code].users.map(u => { const s = io.sockets.sockets.get(u.id); return { ...u, voiceState: rooms[code].voiceStates[u.id] || null, peerId: s?.peerId || null }; })); }
+    function broadcastUsers(code) { if (rooms[code]) io.to(code).emit('users-update', rooms[code].users.map(u => { const s = io.sockets.sockets.get(u.id); const vs = rooms[code].voiceStates[u.id] || null; return { ...u, voiceState: vs, videoEnabled: !!(vs && vs.videoEnabled), screenEnabled: !!(vs && vs.screenEnabled), peerId: s?.peerId || null }; })); }
     function broadcastQueue(code) { if (rooms[code]) io.to(code).emit('queue-update', rooms[code].queue); }
     function broadcastInbox(code) { if (rooms[code]) { const r = rooms[code]; io.to(r.adminId).emit('inbox-update', r.inbox); r.users.forEach(u => { if (u.isMod) io.to(u.id).emit('inbox-update', r.inbox); }); } }
     function playTrackInRoom(code, room, track) {

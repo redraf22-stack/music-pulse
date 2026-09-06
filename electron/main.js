@@ -42,7 +42,7 @@ function createWindow() {
         width: 1400, height: 900, minWidth: 1000, minHeight: 700,
         icon: path.join(__dirname, '../build/icon.ico'),
         autoHideMenuBar: true,
-        webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+        webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
         title: 'MusicPulse'
     });
     mainWindow.setMenuBarVisibility(false);
