@@ -66,16 +66,20 @@ function createWindow() {
       } catch (e) { callback({}); }
     });
     mainWindow.loadFile(path.join(__dirname, '../src/start.html'));
-    autoUpdater.checkForUpdatesAndNotify();
-    autoUpdater.on('update-downloaded', () => {
-        const { dialog } = require('electron');
-        dialog.showMessageBox(mainWindow, {
-            type: 'info', title: 'Обновление готово',
-            message: 'Новая версия MusicPulse скачана. Перезапустить сейчас?',
-            buttons: ['Перезапустить', 'Позже']
-        }).then(r => { if (r.response === 0) autoUpdater.quitAndInstall(); });
-    });
-    autoUpdater.on('error', e => console.error('Update error:', e.message));
+    if (!process.argv.includes('--dev')) {
+    setTimeout(() => {
+        autoUpdater.checkForUpdatesAndNotify();
+        autoUpdater.on('update-downloaded', () => {
+            const { dialog } = require('electron');
+            dialog.showMessageBox(mainWindow, {
+                type: 'info', title: 'Обновление готово',
+                message: 'Новая версия MusicPulse скачана. Перезапустить?',
+                buttons: ['Перезапустить', 'Позже']
+            }).then(r => { if (r.response === 0) autoUpdater.quitAndInstall(); });
+        });
+        autoUpdater.on('error', e => console.error('Update error:', e.message));
+    }, 3000);
+}
     if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
     mainWindow.on('closed', () => { mainWindow = null; });
 }

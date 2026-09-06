@@ -1,6 +1,6 @@
 {
   "name": "musicpulse",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "MusicPulse - совместное прослушивание музыки в локальной сети",
   "main": "electron/main.js",
   "scripts": {
@@ -57,9 +57,10 @@
       "shortcutName": "MusicPulse"
     },
     "publish": {
-      "provider": "github",
-      "owner": "redraf22-stack",
-      "repo": "music-pulse"
+    "provider": "github",
+    "owner": "redraf22-stack",
+    "repo": "music-pulse",
+    "releaseType": "release"
     }
   }
 }
