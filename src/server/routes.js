@@ -186,7 +186,7 @@ module.exports = function (app, utils) {
         try {
             const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' };
             if (req.headers.range) headers.Range = req.headers.range;
-            const r = await axios.get(url, { responseType: 'stream', timeout: 30000, headers, validateStatus: s => s < 400 });
+            const r = await axios.get(url, { responseType: 'stream', timeout: 60000, headers, validateStatus: s => s < 400 });
             if (r.headers['content-range']) res.set('Content-Range', r.headers['content-range']);
             res.set('Accept-Ranges', 'bytes');
             res.set('Content-Type', r.headers['content-type'] || 'audio/mpeg');

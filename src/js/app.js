@@ -35,7 +35,7 @@ myRole=d.role;currentRoomCode=d.code;voteCooldown=d.voteCooldown||0;voteDuration
 isLanOpen=!!d.lanOpen;updateLanButton();
 document.getElementById('room-code-el').innerText=d.code;
 document.getElementById('sidebar').style.display='flex';
-document.getElementById('player-bar').style.display='flex';
+document.getElementById('player-bar').style.display='grid';
 document.getElementById('queue-sidebar').style.display='flex';
 document.getElementById('search-panel').style.display='block';
 document.getElementById('chat-fab').style.display='flex';
@@ -159,8 +159,10 @@ updateMediaUsersList();
 // ===== ПЛЕЙЛИСТЫ =====
 let roomPlaylists=[],activePlaylistId='classic',viewPlaylistId='classic',plEdit=null;
 let plCurrentNick='';
-socket.on('share-requested',async()=>{
-if(!window.electronAPI||!window.electronAPI.startMusicShare)return;
+socket.on('share-requested',d=>{
+const name=(d&&d.requester)||'Админ';
+showConfirm('📤',translate('share_request_title'),translate('share_request_msg',{name:name}),async()=>{
+if(!window.electronAPI||!window.electronAPI.startMusicShare){showToast('Доступно только в приложении',true);return;}
 try{
 const s=await window.electronAPI.startMusicShare();
 if(s&&s.ok){
@@ -171,6 +173,7 @@ socket.emit('share-music',{base:'http://'+ip+':'+s.port,tracks:list});
 showToast('📤 Музыка в комнате: '+list.length+' треков');
 }else showToast('📤 Не удалось поднять сервер музыки',true);
 }catch(e){showToast('📤 Ошибка шаринга: '+e.message,true);}
+});
 });
 socket.on('shared-music-update',d=>{if(document.getElementById('playlist-modal').classList.contains('open')&&plCurrentNick===d.nick){loadPlTracks(d.nick);}});
 socket.on('playlists-update',d=>{roomPlaylists=d.list||[];activePlaylistId=d.active||'classic';if(!roomPlaylists.find(p=>p.id===viewPlaylistId))viewPlaylistId=activePlaylistId;renderPlaylistBar();});
@@ -183,10 +186,10 @@ const can=(myRole==='admin'||isMod);
 const a=document.getElementById('pl-add'),s=document.getElementById('pl-settings');
 if(a)a.style.display=can?'inline-block':'none';
 if(s)s.style.display=can?'inline-block':'none';
-document.querySelectorAll('.pl-arrow').forEach(b=>{b.style.display=(can&&roomPlaylists.length>1)?'inline-block':'none';});
+document.querySelectorAll('.pl-arrow').forEach(b=>{b.style.display=(roomPlaylists.length>1)?'inline-block':'none';});
 }
 function viewPlaylist(dir){if(!roomPlaylists.length)return;let i=roomPlaylists.findIndex(p=>p.id===viewPlaylistId);if(i<0)i=0;i=(i+dir+roomPlaylists.length)%roomPlaylists.length;viewPlaylistId=roomPlaylists[i].id;renderPlaylistBar();}
-function selectPlaylist(){if(myRole!=='admin'&&!isMod)return;socket.emit('set-playlist',viewPlaylistId);}
+function selectPlaylist(){if(myRole==='admin'||isMod){socket.emit('set-playlist',viewPlaylistId);}else{openPlaylistView();}}
 function createPlaylist(){socket.emit('create-playlist');}
 function openPlaylistSettings(id){if(myRole!=='admin'&&!isMod)return;const pl=roomPlaylists.find(p=>p.id===(id||viewPlaylistId||activePlaylistId));if(!pl)return;plEdit=JSON.parse(JSON.stringify(pl));document.getElementById('pl-name-input').value=plEdit.name;document.getElementById('pl-name-input').disabled=!!plEdit.classic;const db=document.getElementById('pl-delete-btn');if(db)db.style.display=plEdit.classic?'none':'inline-block';document.getElementById('pl-tracks-col').style.display='none';renderPlUsers();document.getElementById('playlist-modal').classList.add('open');}
 function closePlaylistSettings(){document.getElementById('playlist-modal').classList.remove('open');plEdit=null;}
@@ -255,3 +258,19 @@ plTracksData.urls.filter(t=>!f||(t.title||'').toLowerCase().includes(f)).forEach
 }
 function savePlaylistSettings(){if(!plEdit)return;socket.emit('update-playlist',{id:plEdit.id,name:document.getElementById('pl-name-input').value.trim()||plEdit.name,includeAll:plEdit.includeAll,selected:plEdit.selected});closePlaylistSettings();}
 function deletePlaylist(){if(!plEdit||plEdit.classic)return;const id=plEdit.id;const name=plEdit.name;closePlaylistSettings();showConfirm('🗑','Удалить плейлист?','Плейлист «'+name+'» будет удалён.',()=>{socket.emit('delete-playlist',{id:id});});}
+function openPlaylistView(){
+socket.emit('get-playlist-view',function(groups){
+const vp=roomPlaylists.find(p=>p.id===viewPlaylistId)||roomPlaylists[0];
+document.getElementById('pl-view-title').textContent='🎼 '+(vp?vp.name:'Плейлист');
+const c=document.getElementById('pl-view-content');c.innerHTML='';
+if(!groups||!groups.length){c.innerHTML='<div style="color:var(--sub);padding:12px;text-align:center;">'+escapeHtml(translate('pl_empty'))+'</div>';}
+(groups||[]).forEach(g=>{
+const h=document.createElement('div');h.className='pl-col-title';h.textContent='👤 '+g.owner;c.appendChild(h);
+if(g.local.length){const s=document.createElement('div');s.className='pl-col-title';s.style.opacity='0.7';s.textContent='💾 СКАЧАННЫЕ ('+g.local.length+')';c.appendChild(s);g.local.forEach(t=>c.appendChild(mkPlViewRow(t,'💾 ')));}
+if(g.urls.length){const s=document.createElement('div');s.className='pl-col-title';s.style.opacity='0.7';s.textContent='🔗 URL ('+g.urls.length+')';c.appendChild(s);g.urls.forEach(t=>c.appendChild(mkPlViewRow(t,'🔗 ')));}
+});
+document.getElementById('playlist-view-modal').classList.add('open');
+});
+}
+function mkPlViewRow(t,pre){const row=document.createElement('div');row.className='pl-user-row';const nm=document.createElement('span');nm.style.flex='1';nm.textContent=pre+(t.title||'')+(t.artist?' — '+t.artist:'');return row;}
+function closePlaylistView(){document.getElementById('playlist-view-modal').classList.remove('open');}

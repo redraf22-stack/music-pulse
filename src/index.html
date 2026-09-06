@@ -168,6 +168,13 @@
 <a class="media-viewer-download" id="media-viewer-download" download title="Скачать">⬇</a>
 <div class="media-viewer-content" id="media-viewer-content"></div>
 </div>
+<div class="playlist-view-modal" id="playlist-view-modal">
+<div class="url-modal-box">
+<button class="url-modal-close" onclick="closePlaylistView()">✕</button>
+<h2 id="pl-view-title">🎼 Плейлист</h2>
+<div id="pl-view-content" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;"></div>
+</div>
+</div>
 
 <script src="js/i18n.js"></script>
 <script src="js/helpers.js"></script>
