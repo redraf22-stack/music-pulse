@@ -1,3 +1,6 @@
+function volStore(){try{return JSON.parse(localStorage.getItem('mp_volumes')||'{}');}catch(e){return{};}}
+function volStoreSet(name,v){const s=volStore();s[name]=v;localStorage.setItem('mp_volumes',JSON.stringify(s));}
+function volByName(name){const s=volStore();return s[name];}
 // ===== ГОЛОС, ВИДЕО, ЭКРАН =====
 function startSpeakingDetection(p,s){try{const c=getGlobalAudioContext();if(!c||s.getAudioTracks().length===0)return;const x=c.createMediaStreamSource(s);const g=c.createGain();g.gain.value=4.0;const a=c.createAnalyser();a.fftSize=256;a.smoothingTimeConstant=0.3;x.connect(g);g.connect(a);analysers[p]=a;gains[p]=g;}catch(e){}}
 function startSelfSpeakingDetection(s){try{const c=getGlobalAudioContext();if(!c)return;const x=c.createMediaStreamSource(s);const g=c.createGain();g.gain.value=4.0;const a=c.createAnalyser();a.fftSize=256;a.smoothingTimeConstant=0.3;x.connect(g);g.connect(a);myAnalyser=a;}catch(e){}}
@@ -45,7 +48,9 @@ function handleAudioCall(c){
 currentCalls[c.peer]=c;
 c.on('stream',rs=>{
 const ctx=getGlobalAudioContext();const pid=c.peer;
-const sv=localVolumes[pid]!==undefined?localVolumes[pid]:0.5;
+let sv=localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
+if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?volByName(u.name):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
+if(sv===undefined)sv=0.5;
 const ae=new Audio();ae.srcObject=rs;ae.volume=0;ae.muted=false;c._audioElement=ae;
 if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const s=ctx.createWaveShaper();s.curve=makeSoftClipCurve();s.oversample='4x';const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(s);s.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;c._shaperNode=s;}catch(e){}}
 ae.play().catch(()=>{});startSpeakingDetection(pid,rs);
@@ -77,7 +82,7 @@ async function toggleVideo(){
 const btn=document.getElementById('video-toggle-btn');
 if(myVideoEnabled){
 myVideoEnabled=false;btn.classList.remove('active');btn.innerHTML='📷 Включить видеосвязь';
-if(myVideoStream){myVideoStream.getTracks().forEach(t=>t.stop());myVideoStream=null;}
+if(myVideoStream){myVideoStream.getTracks().forEach(t=>{t.stop();});myVideoStream=null;}
 socket.emit('toggle-video',false,TAB_ID);
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 delete allUsersWithVideo[myUniqueKey];
@@ -90,10 +95,9 @@ const constraints={video:selectedCameraId?{deviceId:{exact:selectedCameraId}}:tr
 myVideoStream=await navigator.mediaDevices.getUserMedia(constraints);myVideoEnabled=true;
 btn.classList.add('active');btn.innerHTML='📷 Выключить видеосвязь';
 socket.emit('toggle-video',true,TAB_ID);
-Object.keys(allUsersWithVideo).forEach(k=>{const u=allUsersWithVideo[k];if(u.peerId&&u.peerId!==myPeerId&&!videoCalls[u.peerId]){const call=peer.call(u.peerId,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}});
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 allUsersWithVideo[myUniqueKey]={userId:mySocketId,userName:myNickname,peerId:myPeerId,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,isSelf:true,tabId:TAB_ID};
-Object.keys(currentCalls).forEach(pid=>{if(pid!==myPeerId){const call=peer.call(pid,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}});
+Object.keys(allUsersWithVideo).forEach(k=>{const u=allUsersWithVideo[k];if(u.peerId&&u.peerId!==myPeerId&&!videoCalls[u.peerId]){try{const call=peer.call(u.peerId,myVideoStream,{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}catch(e){}}});
 updateMediaUsersList();
 showToast('📹 Видеосвязь включена');
 }catch(e){showToast('Не удалось включить камеру: '+e.message,true);}
@@ -103,7 +107,7 @@ async function toggleScreen(){
 const btn=document.getElementById('screen-toggle-btn');
 if(myScreenEnabled){
 myScreenEnabled=false;btn.classList.remove('active');btn.innerHTML='📺 Транслировать экран';
-if(myScreenStream){myScreenStream.getTracks().forEach(t=>t.stop());myScreenStream=null;}
+if(myScreenStream){myScreenStream.getTracks().forEach(t=>{t.stop();});myScreenStream=null;}
 socket.emit('toggle-screen',false,TAB_ID);
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 delete allUsersWithScreen[myUniqueKey];
@@ -115,14 +119,11 @@ if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',
 myScreenStream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:"always"},audio:false});
 myScreenEnabled=true;
 btn.classList.add('active');btn.innerHTML='📺 Остановить трансляцию';
-myScreenStream.getVideoTracks()[0].onended=()=>{toggleScreen();};
+myScreenStream.getVideoTracks()[0].onended=()=>{if(myScreenEnabled)toggleScreen();};
 socket.emit('toggle-screen',true,TAB_ID);
-Object.keys(allUsersWithScreen).forEach(k=>{const u=allUsersWithScreen[k];if(u.peerId&&u.peerId!==myPeerId&&!screenCalls[u.peerId]){const call=peer.call(u.peerId,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}});
 const myUniqueKey=myPeerId+'_'+TAB_ID;
 allUsersWithScreen[myUniqueKey]={userId:mySocketId,userName:myNickname,peerId:myPeerId,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,isSelf:true,tabId:TAB_ID};
-Object.keys(currentCalls).forEach(pid=>{if(pid!==myPeerId){const call=peer.call(pid,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}});
-Object.keys(allUsersWithVideo).forEach(k=>{const u=allUsersWithVideo[k];if((id&&u.userId===id)||(tp&&u.peerId===tp)){delete allUsersWithVideo[k];if(videoWindows[k])closeVideoWindow(k);}});
-Object.keys(allUsersWithScreen).forEach(k=>{const u=allUsersWithScreen[k];if((id&&u.userId===id)||(tp&&u.peerId===tp)){delete allUsersWithScreen[k];if(screenWindows[k])closeScreenWindow(k);}});
+Object.keys(allUsersWithScreen).forEach(k=>{const u=allUsersWithScreen[k];if(u.peerId&&u.peerId!==myPeerId&&!screenCalls[u.peerId]){try{const call=peer.call(u.peerId,myScreenStream,{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}catch(e){}}});
 updateMediaUsersList();
 showToast('📺 Трансляция экрана включена');
 }catch(e){showToast('Не удалось начать трансляцию: '+e.message,true);}
@@ -183,28 +184,22 @@ role.textContent=roleText;
 info.appendChild(name);info.appendChild(role);
 item.appendChild(avatar);item.appendChild(info);
 const buttonsDiv=document.createElement('div');buttonsDiv.className='media-buttons';
-if(u.hasVideo){const videoBtn=document.createElement('button');videoBtn.className='media-show-btn video'+(videoWindows[uniqueKey]?' active':'');videoBtn.textContent=videoWindows[uniqueKey]?'✓ Видео':'📹 Видео';videoBtn.title=videoWindows[uniqueKey]?'Закрыть видео':'Смотреть видео';videoBtn.onclick=()=>{
-    if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);updateMediaUsersList();return;}
-    if(!videoStreams[u.peerId]&&!u.isSelf){
-        socket.emit('request-media',{userId:u.userId,type:'video'});
-        showToast('📹 Запрашиваю видео у '+u.userName);
-        setTimeout(()=>{if(videoStreams[u.peerId])openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},2000);
-    } else {
-        openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);
-    }
-    updateMediaUsersList();
-};buttonsDiv.appendChild(videoBtn);}
-if(u.hasScreen){const screenBtn=document.createElement('button');screenBtn.className='media-show-btn screen'+(screenWindows[uniqueKey]?' active':'');screenBtn.onclick=()=>{
-    if(screenWindows[uniqueKey]){closeScreenWindow(uniqueKey);updateMediaUsersList();return;}
-    if(!screenStreams[u.peerId]&&!u.isSelf){
-        socket.emit('request-media',{userId:u.userId,type:'screen'});
-        showToast('📺 Запрашиваю экран у '+u.userName);
-        setTimeout(()=>{if(screenStreams[u.peerId])openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},2000);
-    } else {
-        openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);
-    }
-    updateMediaUsersList();
-};buttonsDiv.appendChild(screenBtn);}
+if(u.hasVideo){
+const videoBtn=document.createElement('button');
+videoBtn.className='media-show-btn video'+(videoWindows[uniqueKey]?' active':'');
+videoBtn.textContent=videoWindows[uniqueKey]?'✓ Видео':'📹 Видео';
+videoBtn.title=videoWindows[uniqueKey]?'Закрыть видео':'Смотреть видео';
+videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{if(!videoStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');setTimeout(()=>{if(videoStreams[u.peerId])openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
+buttonsDiv.appendChild(videoBtn);
+}
+if(u.hasScreen){
+const screenBtn=document.createElement('button');
+screenBtn.className='media-show-btn screen'+(screenWindows[uniqueKey]?' active':'');
+screenBtn.textContent=screenWindows[uniqueKey]?'✓ Экран':'📺 Экран';
+screenBtn.title=screenWindows[uniqueKey]?'Закрыть экран':'Смотреть экран';
+screenBtn.onclick=()=>{if(screenWindows[uniqueKey]){closeScreenWindow(uniqueKey);}else{if(!screenStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'screen'});showToast('📺 Запрашиваю трансляцию...');setTimeout(()=>{if(screenStreams[u.peerId])openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
+buttonsDiv.appendChild(screenBtn);
+}
 item.appendChild(buttonsDiv);list.appendChild(item);
 });
 }
@@ -272,7 +267,7 @@ function toggleMic(){if(!myStream||forceMuted){if(forceMuted)showToast(translate
 function toggleDeafen(){if(forceDeafened){showToast(translate('force_deafened'),true);return;}isDeafened=!isDeafened;applyDeafenState();updateVoiceControlsInPlayer();syncSelfVoiceState();}
 function applyDeafenState(){const shouldBeDeafened=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(shouldBeDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=shouldBeDeafened;}});}
 socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){myStream.getAudioTracks()[0].enabled=!forceMuted&&!isMuted;}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(forceDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=forceDeafened||isDeafened;}});showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
-function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
+function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(u.name,val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
 function onUserVolumeInput(sid,el,rng){let v=parseInt(el.value);if(isNaN(v)||v<0)v=0;if(v>200)v=200;el.value=v;const sv=v/200;if(rng)rng.value=sv;setLocalUserVolume(sid,sv);}
 function spinUserVolume(sid,delta,rng,inp){let v=parseInt(inp.value);if(isNaN(v))v=100;v+=delta;if(v<0)v=0;if(v>200)v=200;inp.value=v;onUserVolumeInput(sid,inp,rng);
 socket.on('media-requested', async ({ requesterSocketId, type }) => {

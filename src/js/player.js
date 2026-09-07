@@ -61,7 +61,7 @@ const urlChanged=ns&&audio.src!==ns;
 if(ns&&(urlChanged||identityChanged)){
 trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';
 audio.pause();audio.src=ns;audio.load();
-const onReady=()=>{if(audio.readyState<2){setTimeout(onReady,100);return;}if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
+const onReady=()=>{if(audio.readyState<2){setTimeout(onReady,100);return;}if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().then(()=>{if(myRole==='admin'||isMod)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});}).catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
 audio.addEventListener('canplay',onReady,{once:true});
 audio.addEventListener('loadedmetadata',onReady,{once:true});
 setTimeout(()=>{if(trackChanging){trackChanging=false;showToast(translate('load_problem'),true);}},60000);
@@ -69,10 +69,12 @@ return;
 }
 if(!trackChanging&&state.trackUrl){
 if(state.isSeek&&audio.readyState>=2){audio.currentTime=state.currentTime;lastSyncTime=Date.now();}
+else if(!isSeeking&&Date.now()-trackLoadedAt>5000){
 const expected=(state.playing&&state.startedAt)?(Date.now()+serverTimeOffset-state.startedAt)/1000:(state.currentTime||0);
 if(expected>=0&&(!audio.duration||expected<=audio.duration)){
 const diff=Math.abs(audio.currentTime-expected);
-if(diff>1.5&&audio.readyState>=2){audio.currentTime=expected;}
+if(diff>2&&audio.readyState>=2){audio.currentTime=expected;}
+}
 }
 }
 lastSyncTime=Date.now();
@@ -124,7 +126,7 @@ socket.on('inbox-update',ib=>{if(myRole!=='admin'&&!isMod){currentInbox=[];rende
 function renderInbox(){const m=document.getElementById('inbox-modal');if((myRole!=='admin'&&!isMod)||!currentInbox.length){m.style.display='none';m.innerHTML='';return;}const s=currentInbox[0];m.style.display='flex';m.innerHTML='';let ah='';if(s.isPoll){ah=`<div class="inbox-actions"><span style="color:var(--accent);font-size:12px">${escapeHtml(translate('poll_voting'))}</span></div>`;}else{let pb='';if(!s.pollResults&&s.suggestedBy&&!s.suggestedBy.includes('Админ')&&!s.suggestedBy.includes('Мод')&&!s.suggestedBy.includes('👑')&&!s.suggestedBy.includes('🛡️'))pb=`<button class="ib-btn ib-poll" onclick="startGuestPoll('${escapeHtml(s.id)}')">${escapeHtml(translate('start_poll'))}</button>`;ah=`<div class="inbox-actions" style="display:flex"><button class="ib-btn ib-now" onclick="resolveInbox('${escapeHtml(s.id)}','now')">${escapeHtml(translate('play_now'))}</button>${pb}<button class="ib-btn ib-next" onclick="resolveInbox('${escapeHtml(s.id)}','next')">${escapeHtml(translate('next_queue'))}</button><button class="ib-btn ib-end" onclick="resolveInbox('${escapeHtml(s.id)}','end')">${escapeHtml(translate('end_queue'))}</button><button class="ib-btn ib-reject" onclick="resolveInbox('${escapeHtml(s.id)}','reject')">${escapeHtml(translate('reject'))}</button></div>`;}let rh='';if(s.pollResults){const r=s.pollResults;rh=`<div class="poll-results"><div style="display:flex;justify-content:space-between"><span>👍 ${r.for}%</span><span>👎 ${r.against}%</span><span>😐 ${r.neutral}%</span></div><div style="display:flex;height:4px;width:100%;border-radius:2px;overflow:hidden;margin-top:2px"><div class="result-fill fill-for" style="width:${r.for}%"></div><div class="result-fill fill-neutral" style="width:${r.neutral}%"></div><div class="result-fill fill-against" style="width:${r.against}%"></div></div><span style="font-size:10px;color:#666">${translate('total_votes',{n:r.total})}</span></div>`;}m.innerHTML=`<img src="${escapeHtml(s.cover||'')}" width="50" height="50" onerror="this.src=''"><div class="inbox-info"><b>${escapeHtml((s.isLocal?'💾 ':'')+(s.title||''))}</b><span>${escapeHtml(s.artist||'')} • ${escapeHtml(translate('suggested_by'))} ${escapeHtml(s.suggestedBy||'?')}</span>${rh}</div>${ah}`;}
 function startGuestPoll(id){const tr=currentInbox.find(x=>x.id===id);if(tr)socket.emit('start-poll',tr);}
 function resolveInbox(id,ac){socket.emit('resolve-inbox',{id:id,action:ac});}
-socket.on('queue-update',q=>{document.getElementById('queue-count').textContent=q.length;const l=document.getElementById('queue-list');if(!l)return;if(!q.length){l.innerHTML=`<div style="color:var(--sub);font-size:13px;padding:12px;text-align:center;">${escapeHtml(translate('queue_empty'))}</div>`;return;}const cq=myRole==='admin'||isMod||isVip;l.innerHTML='';q.forEach((s,i)=>{const d=document.createElement('div');d.className='queue-item';const n=document.createElement('span');n.className='queue-num';n.textContent=String(i+1);d.appendChild(n);const img=document.createElement('img');img.src=s.cover||'';img.width=36;img.height=36;img.loading='lazy';img.onerror=function(){this.style.background='#333';this.src='';};d.appendChild(img);const inf=document.createElement('div');inf.className='queue-info';const tb=document.createElement('b');tb.textContent=((s.isUrl?'🔗 ':s.isLocal?'💾 ':''))+(s.title||'');inf.appendChild(tb);const sp=document.createElement('span');sp.textContent=((s.artist&&s.artist.name)||s.artist||'?')+' • '+(s.suggestedBy||'?').replace('🔀','');inf.appendChild(sp);d.appendChild(inf);if(cq){const cd=document.createElement('div');cd.className='queue-controls';const ub=document.createElement('button');ub.className='q-btn';ub.textContent='▲';ub.onclick=()=>moveTrack(s.id,'up');if(i===0)ub.disabled=true;const db=document.createElement('button');db.className='q-btn';db.textContent='▼';db.onclick=()=>moveTrack(s.id,'down');if(i===q.length-1)db.disabled=true;cd.appendChild(ub);cd.appendChild(db);d.appendChild(cd);}if(myRole==='admin'||isMod){const rb=document.createElement('button');rb.className='queue-remove';rb.textContent='✕';rb.onclick=()=>removeFromQueue(s.id);d.appendChild(rb);}l.appendChild(d);});});
+socket.on('queue-update',q=>{document.getElementById('queue-count').textContent=q.length;const qp=document.getElementById('queue-plural');if(qp){const m=q.length%100;qp.textContent=(typeof currentLang!=='undefined'&&currentLang==='en')?'tracks':((m>=11&&m<=14)?'треков':(q.length%10===1?'трек':([2,3,4].includes(q.length%10)?'трека':'треков')));}const l=document.getElementById('queue-list');if(!l)return;if(!q.length){l.innerHTML=`<div style="color:var(--sub);font-size:13px;padding:12px;text-align:center;">${escapeHtml(translate('queue_empty'))}</div>`;return;}const cq=myRole==='admin'||isMod||isVip;l.innerHTML='';q.forEach((s,i)=>{const d=document.createElement('div');d.className='queue-item';const n=document.createElement('span');n.className='queue-num';n.textContent=String(i+1);d.appendChild(n);const img=document.createElement('img');img.src=s.cover||'';img.width=36;img.height=36;img.loading='lazy';img.onerror=function(){this.style.background='#333';this.src='';};d.appendChild(img);const inf=document.createElement('div');inf.className='queue-info';const tb=document.createElement('b');tb.textContent=((s.isUrl?'🔗 ':s.isLocal?'💾 ':''))+(s.title||'');inf.appendChild(tb);const sp=document.createElement('span');sp.textContent=((s.artist&&s.artist.name)||s.artist||'?')+' • '+(s.suggestedBy||'?').replace('🔀','');inf.appendChild(sp);d.appendChild(inf);if(cq){const cd=document.createElement('div');cd.className='queue-controls';const ub=document.createElement('button');ub.className='q-btn';ub.textContent='▲';ub.onclick=()=>moveTrack(s.id,'up');if(i===0)ub.disabled=true;const db=document.createElement('button');db.className='q-btn';db.textContent='▼';db.onclick=()=>moveTrack(s.id,'down');if(i===q.length-1)db.disabled=true;cd.appendChild(ub);cd.appendChild(db);d.appendChild(cd);}if(myRole==='admin'||isMod){const rb=document.createElement('button');rb.className='queue-remove';rb.textContent='✕';rb.onclick=()=>removeFromQueue(s.id);d.appendChild(rb);}l.appendChild(d);});});
 function moveTrack(id,dir){if(myRole!=='admin'&&!isMod&&!isVip)return;socket.emit('reorder-queue',{id:id,direction:dir});}
 function removeFromQueue(id){if(myRole!=='admin'&&!isMod)return;socket.emit('remove-from-queue',id);}
 socket.on('settings-update',s=>{if(s.voteCooldown!==undefined){voteCooldown=s.voteCooldown;if(myRole==='admin')document.getElementById('cooldown-input').value=voteCooldown;}if(s.voteDuration!==undefined){voteDuration=s.voteDuration;if(myRole==='admin')document.getElementById('vote-duration-input').value=voteDuration;}searchMusic();});
@@ -173,3 +175,125 @@ if(d.success){closeUrlTrackModal();showToast('🔗 Трек сохранён!');
 else showToast(d.error||'Ошибка сохранения',true);
 }catch(e){showToast('Ошибка сохранения',true);}
 }
+// ===== ДОБАВЛЕНИЕ ФАЙЛОМ =====
+let pendingMusicId='';
+let pendingFtCover='';
+async function pickFtCover(e){
+const f=e.target.files[0];if(!f)return;
+const fd=new FormData();fd.append('file',f);
+try{const r=await fetch('/api/upload-chat',{method:'POST',body:fd});const d=await r.json();if(d.success){pendingFtCover=d.url;document.getElementById('ft-cover-preview').src=d.url;document.getElementById('ft-auto-cover').checked=false;}}catch(err){showToast('Ошибка загрузки обложки',true);}
+e.target.value='';
+}
+function toggleAddMenu(){const m=document.getElementById('add-menu');if(!m.style.display||m.style.display==='none'){const b=document.getElementById('add-url-btn');const r=b.getBoundingClientRect();m.style.left=r.left+'px';m.style.top=(r.bottom+6)+'px';m.style.display='flex';}else{m.style.display='none';}}
+function closeAddMenu(){document.getElementById('add-menu').style.display='none';}
+document.addEventListener('click',e=>{if(!e.target.closest('#add-menu')&&!e.target.closest('#add-url-btn'))closeAddMenu();});
+function openFileTrackModal(){closeAddMenu();pendingMusicId='';pendingFtCover='';document.getElementById('ft-file').value='';document.getElementById('ft-cover-input').value='';document.getElementById('ft-cover-preview').src='';document.getElementById('ft-auto-cover').checked=true;document.getElementById('ft-title').value='';document.getElementById('ft-artist').value='';document.getElementById('ft-album').value='';document.getElementById('ft-status').textContent='';const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 Выбрать файл…';pb.classList.remove('has');document.getElementById('file-track-modal').classList.add('open');}
+function closeFileTrackModal(){document.getElementById('file-track-modal').classList.remove('open');}
+async function pickMusicFile(e){
+const f=e.target.files[0];if(!f)return;
+const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 '+f.name;pb.classList.add('has');
+document.getElementById('ft-status').textContent='⏳ Загружаю и читаю теги...';
+const fd=new FormData();fd.append('file',f);
+try{
+const r=await fetch('/api/upload-music',{method:'POST',body:fd});const d=await r.json();
+if(d.success){pendingMusicId=d.id;document.getElementById('ft-title').value=d.title||'';document.getElementById('ft-artist').value=d.artist||'';document.getElementById('ft-album').value=d.album||'';if(d.cover){pendingFtCover=d.cover;document.getElementById('ft-cover-preview').src=d.cover;document.getElementById('ft-auto-cover').checked=false;document.getElementById('ft-status').textContent='✅ Теги и обложка считаны из файла.';}else{document.getElementById('ft-auto-cover').checked=true;document.getElementById('ft-status').textContent='✅ Теги считаны. Обложки в файле нет — подберём по названию.';}}
+else showToast(d.error||'Ошибка загрузки',true);
+}catch(err){showToast('Ошибка загрузки',true);}
+}
+async function confirmMusicFile(){
+if(!pendingMusicId){showToast('Сначала выбери файл',true);return;}
+const title=document.getElementById('ft-title').value.trim();if(!title){showToast('Укажи название',true);return;}
+try{
+const r=await fetch('/api/confirm-music',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pendingMusicId,title:title,artist:document.getElementById('ft-artist').value.trim()||'Unknown Artist',album:document.getElementById('ft-album').value.trim(),owner:myNickname,cover:document.getElementById('ft-auto-cover').checked?'':pendingFtCover})});
+const d=await r.json();
+if(d.success){closeFileTrackModal();showToast('💾 Добавлено! Включи трек галочкой в настройках плейлиста.');socket.emit('tracks-changed');searchMusic(1);}
+else showToast(d.error||'Ошибка',true);
+}catch(e){showToast('Ошибка сохранения',true);}
+}
+// ===== МОЯ МУЗЫКА И РЕДАКТИРОВАНИЕ =====
+let editingTrack=null;
+let myMusicTracks=[];
+async function openMyMusic(){
+const c=document.getElementById('my-music-content');c.innerHTML='<div style="color:var(--sub);padding:20px;text-align:center;">Загрузка...</div>';
+document.getElementById('my-music-modal').classList.add('open');
+try{
+const r=await fetch('/api/my-tracks?owner='+encodeURIComponent(myNickname)+'&room='+encodeURIComponent(currentRoomCode));
+const d=await r.json();
+if(d.error){c.innerHTML='<div style="color:var(--sub);padding:20px;text-align:center;">Ошибка: '+escapeHtml(d.error)+'</div>';return;}
+myMusicTracks=d.data||[];
+const si=document.getElementById('my-music-search');if(si)si.value='';
+renderMyMusicList('');
+}catch(e){c.innerHTML='<div style="color:var(--sub);padding:20px;text-align:center;">Ошибка загрузки</div>';}
+}
+function renderMyMusicList(filter){
+const c=document.getElementById('my-music-content');if(!c)return;
+const f=(filter||'').toLowerCase().trim();
+const tracks=f?myMusicTracks.filter(t=>((t.title||'')+' '+(((t.artist&&t.artist.name)||t.artist||''))).toLowerCase().includes(f)):myMusicTracks;
+if(!tracks.length){c.innerHTML='<div style="color:var(--sub);padding:20px;text-align:center;">'+(myMusicTracks.length?'Ничего не найдено':'У тебя пока нет треков.<br>Добавь через ➕')+'</div>';return;}
+c.innerHTML='';
+tracks.forEach(t=>{
+const item=document.createElement('div');item.className='my-music-item';
+const img=document.createElement('img');img.src=t.cover||'';img.onerror=function(){this.style.background='#333';this.src='';};item.appendChild(img);
+const info=document.createElement('div');info.className='mm-info';
+const title=document.createElement('div');title.className='mm-title';title.textContent=t.title||'Без названия';info.appendChild(title);
+const artist=document.createElement('div');artist.className='mm-artist';artist.textContent=(t.artist&&t.artist.name)||t.artist||'Unknown Artist';info.appendChild(artist);
+item.appendChild(info);
+const badge=document.createElement('div');badge.className='mm-badge';badge.textContent=t.type==='url'?'🔗 URL':(t.type==='shared'?'📤 Общая':'💾 Файл');item.appendChild(badge);
+const del=document.createElement('button');del.className='mm-del';del.textContent='🗑';del.title='Удалить';del.onclick=(e)=>{e.stopPropagation();deleteMyTrack(t);};item.appendChild(del);
+item.ondblclick=()=>openEditTrack(t);
+c.appendChild(item);
+});
+}
+function deleteMyTrack(t){
+const msg=t.type==='url'?'Убрать трек из списка URL? Сам файл не удаляется.':'Удалить файл с диска БЕЗВОЗВРАТНО?';
+showConfirm('🗑','Удаление',msg,async()=>{
+try{
+const r=await fetch('/api/delete-track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:t.type,id:t.type==='url'?t.id:t.filename,owner:myNickname})});
+const d=await r.json();
+if(d.success){showToast('🗑 Удалено.');socket.emit('tracks-changed');openMyMusic();searchMusic(1);}
+else showToast(d.error||'Ошибка',true);
+}catch(e){showToast('Ошибка удаления',true);}
+});
+}
+function closeMyMusic(){document.getElementById('my-music-modal').classList.remove('open');}
+function openEditTrack(t){
+editingTrack=t;editingTrack._newCover='';
+const artistName=(t.artist&&t.artist.name)||t.artist||'';
+document.getElementById('et-title-modal').textContent='⚙ '+(t.title||'Без названия');
+document.getElementById('et-fields').innerHTML=`
+<div style="display:flex;gap:14px;align-items:center;margin-bottom:14px;">
+<div style="position:relative;flex-shrink:0;">
+<img id="et-cover-preview" src="${escapeHtml(t.cover||'')}" width="72" height="72" style="border-radius:8px;background:#333;object-fit:cover;display:block;">
+<button style="position:absolute;bottom:-8px;right:-8px;width:28px;height:28px;border-radius:50%;border:none;background:var(--accent);color:black;cursor:pointer;font-size:13px;" onclick="document.getElementById('et-cover-input').click()" title="Выбрать фото">📷</button>
+<input type="file" id="et-cover-input" accept="image/*" style="display:none;" onchange="pickEtCover(event)">
+</div>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);cursor:pointer;"><input type="checkbox" id="et-auto-cover"> Авто-обложка (по названию)</label>
+</div>
+<div class="url-field"><label>Название *</label><input type="text" id="et-title" value="${escapeHtml(t.title||'')}"></div>
+<div class="url-field"><label>Исполнитель</label><input type="text" id="et-artist" value="${escapeHtml(artistName)}"></div>
+<div class="url-field"><label>Альбом</label><input type="text" id="et-album" value="${escapeHtml(t.album||'')}"></div>
+${t.type==='url'?`<div class="url-field"><label>Ссылка на трек</label><input type="text" id="et-url" value="${escapeHtml(t.url||'')}"></div>`:''}`;
+document.getElementById('edit-track-modal').classList.add('open');
+}
+function closeEditTrack(){document.getElementById('edit-track-modal').classList.remove('open');editingTrack=null;}
+async function pickEtCover(e){
+const f=e.target.files[0];if(!f)return;
+const fd=new FormData();fd.append('file',f);
+try{const r=await fetch('/api/upload-chat',{method:'POST',body:fd});const d=await r.json();if(d.success){document.getElementById('et-cover-preview').src=d.url;editingTrack._newCover=d.url;document.getElementById('et-auto-cover').checked=false;}}catch(err){showToast('Ошибка загрузки',true);}
+e.target.value='';
+}
+async function saveEditTrack(){
+if(!editingTrack)return;
+const data={title:document.getElementById('et-title').value.trim()||editingTrack.title,artist:document.getElementById('et-artist').value.trim()||'Unknown Artist',album:document.getElementById('et-album').value.trim()||'',cover:document.getElementById('et-auto-cover').checked?'':(editingTrack._newCover||editingTrack.cover||''),url:(document.getElementById('et-url')?document.getElementById('et-url').value.trim():'')};
+try{
+const r=await fetch('/api/update-track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:editingTrack.type,id:editingTrack.type==='url'?editingTrack.id:(editingTrack.type==='shared'?editingTrack.file:editingTrack.filename),owner:myNickname,data:data})});
+const d=await r.json();
+if(d.success){closeEditTrack();showToast('✅ Сохранено! Изменения видны всем.');socket.emit('tracks-changed');openMyMusic();searchMusic(1);}
+else showToast(d.error||'Ошибка',true);
+}catch(e){showToast('Ошибка сохранения',true);}
+}
+socket.on('tracks-refresh',()=>{
+if(document.getElementById('my-music-modal').classList.contains('open'))openMyMusic();
+const q=document.getElementById('search-input').value.trim();
+if(q)searchMusic(1);
+});

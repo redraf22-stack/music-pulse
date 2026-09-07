@@ -171,7 +171,7 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             broadcastPlaylists(socket.roomCode);
             socket.emit('playlist-open-settings', id);
         });
-        socket.on('update-playlist', data => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const pl = room.playlists.find(p => p.id === (data || {}).id); if (!pl) return; if (!pl.classic && data.name) pl.name = String(data.name).substring(0, 40); pl.includeAll = data.includeAll || pl.includeAll; pl.selected = data.selected || pl.selected; broadcastPlaylists(socket.roomCode); });
+        socket.on('update-playlist', data => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const pl = room.playlists.find(p => p.id === (data || {}).id); if (!pl) return; if (!pl.classic && data.name) pl.name = String(data.name).substring(0, 40); pl.includeAll = data.includeAll || pl.includeAll; pl.selected = data.selected || pl.selected; pl.excluded = data.excluded || pl.excluded || {}; broadcastPlaylists(socket.roomCode); });
         socket.on('share-music', data => {
             if (!socket.roomCode) return;
             const room = rooms[socket.roomCode]; if (!room) return;
@@ -186,6 +186,7 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             if (!target) return;
             io.to(target.id).emit('share-requested', { requester: socket.nickname });
         });
+        socket.on('tracks-changed', () => { if (!socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; PL.getPlaylist(room); broadcastPlaylists(socket.roomCode); io.to(socket.roomCode).emit('tracks-refresh'); });
         socket.on('get-playlists', () => { if (!socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; PL.getPlaylist(room); socket.emit('playlists-update', { list: room.playlists, active: room.activePlaylistId }); });
         socket.on('get-playlist-view', async (cb) => {
     if (typeof cb !== 'function' || !socket.roomCode) return;

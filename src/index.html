@@ -43,7 +43,10 @@
 <div id="search-panel" class="search-panel">
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:15px;">
 <div class="ac-wrapper" id="ac-search-wrapper" style="flex:1;margin-bottom:0;"><input type="text" id="search-input" autocomplete="off" data-i18n-ph="search_ph"><div class="ac-list" id="ac-search-list"></div></div>
-<button class="add-url-small" id="add-url-btn" onclick="openUrlTrackModal()" title="Добавить трек по URL">➕</button>
+<div style="display:flex;gap:6px;align-items:center;">
+<button class="add-url-small" id="add-url-btn" onclick="toggleAddMenu()" title="Добавить трек по URL">➕</button>
+<button class="add-url-small" id="my-music-btn" onclick="openMyMusic()" title="Моя музыка">📝</button>
+</div>
 </div>
 <div id="results"></div><div id="pagination" class="pagination" style="display:none;"></div>
 </div>
@@ -61,7 +64,7 @@
 <button class="pl-btn" id="pl-settings" onclick="openPlaylistSettings()" title="Настройки">⚙</button>
 </div>
 </div>
-<div class="queue-header"><h3 data-i18n="queue_label">🎶 Очередь</h3><span id="queue-count">0</span> <span data-i18n="tracks_label">треков</span></div>
+<div class="queue-header"><h3>🎶 В очереди</h3><div class="queue-count-wrap"><span id="queue-count">0</span>&nbsp;<span id="queue-plural">треков</span></div></div>
 <div id="queue-prev-track" class="queue-prev-track" style="display:none;"><img id="qpt-cover" src="" width="28" height="28"><div class="qnp-info"><div class="qnp-label"><svg width="10" height="10" viewBox="0 0 24 24" style="vertical-align:-1px"><path d="M6 6h2v12H6zM18 6l-8.5 6L18 18V6z" fill="currentColor"/></svg> Предыдущая</div><b id="qpt-title">—</b><span id="qpt-artist">—</span></div></div>
 <div id="queue-now-playing" class="queue-now-playing" style="display:none;"><img id="qnp-cover" src="" width="28" height="28"><div class="qnp-info"><div class="qnp-label">▶ Сейчас играет</div><b id="qnp-title">—</b><span id="qnp-artist">—</span></div></div>
 <div class="queue-list" id="queue-list"></div>
@@ -90,6 +93,57 @@
 <div style="display:flex;gap:10px;justify-content:flex-end;">
 <button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closeUrlTrackModal()">Отмена</button>
 <button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="saveUrlTrack()">Сохранить</button>
+</div>
+</div>
+</div>
+<div class="add-menu" id="add-menu" style="display:none;">
+<button class="add-menu-item" onclick="openFileTrackModal()">📁 Добавить файлом</button>
+<button class="add-menu-item" onclick="closeAddMenu();openUrlTrackModal()">🔗 Добавить ссылкой</button>
+</div>
+<div id="file-track-modal">
+<div class="url-modal-box">
+<button class="url-modal-close" onclick="closeFileTrackModal()">✕</button>
+<h2>📁 Трек файлом</h2>
+<div style="display:flex;gap:14px;align-items:center;margin-bottom:14px;">
+<div style="position:relative;flex-shrink:0;">
+<img id="ft-cover-preview" src="" width="72" height="72" style="border-radius:8px;background:#333;object-fit:cover;display:block;">
+<button style="position:absolute;bottom:-8px;right:-8px;width:28px;height:28px;border-radius:50%;border:none;background:var(--accent);color:black;cursor:pointer;font-size:13px;" onclick="document.getElementById('ft-cover-input').click()" title="Выбрать фото">📷</button>
+<input type="file" id="ft-cover-input" accept="image/*" style="display:none;" onchange="pickFtCover(event)">
+</div>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);cursor:pointer;"><input type="checkbox" id="ft-auto-cover" checked> Авто-обложка (как у скачанных)</label>
+</div>
+<div class="url-field"><label>Название *</label><input type="text" id="ft-title"></div>
+<div class="url-field"><label>Исполнитель</label><input type="text" id="ft-artist"></div>
+<div class="url-field"><label>Альбом</label><input type="text" id="ft-album"></div>
+<div class="url-field"><label>Файл музыки *</label>
+<button type="button" class="file-pick-btn" id="ft-pick-btn" onclick="document.getElementById('ft-file').click()">📂 Выбрать файл…</button>
+<input type="file" id="ft-file" accept=".mp3,.wav,.ogg,.flac,.m4a" style="display:none;" onchange="pickMusicFile(event)">
+</div>
+<div id="ft-status" style="font-size:12px;color:var(--sub);margin:6px 0;"></div>
+<div style="font-size:11px;color:var(--sub);margin:8px 0 14px;">Файл скопируется в твою папку с музыкой.</div>
+<div style="display:flex;gap:10px;justify-content:flex-end;">
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closeFileTrackModal()">Отмена</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="confirmMusicFile()">Добавить в мою музыку</button>
+</div>
+</div>
+</div>
+<div id="my-music-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:640px;">
+<button class="url-modal-close" onclick="closeMyMusic()">✕</button>
+<h2 style="margin:0 0 14px;">📝 Моя музыка</h2>
+<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Двойной клик по треку → редактирование. Изменения видны всем.</div>
+<input type="text" id="my-music-search" placeholder="Поиск по названию или исполнителю..." oninput="renderMyMusicList(this.value)" style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:8px;padding:9px 12px;color:#eee;font-size:14px;outline:none;margin-bottom:10px;">
+<div id="my-music-content" class="plv-content"></div>
+</div>
+</div>
+<div id="edit-track-modal">
+<div class="url-modal-box">
+<button class="url-modal-close" onclick="closeEditTrack()">✕</button>
+<h2 id="et-title-modal">⚙ Редактирование</h2>
+<div id="et-fields"></div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closeEditTrack()">Отмена</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="saveEditTrack()">Сохранить</button>
 </div>
 </div>
 </div>

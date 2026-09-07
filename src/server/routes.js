@@ -84,8 +84,8 @@ module.exports = function (app, utils) {
                 return utils.normalizeTrack({ id: 'url-' + (t.id || t.filename), title: t.title, artist: t.artist, cover, preview: t.preview || ('/url-proxy?url=' + encodeURIComponent(t.rawUrl || t.url || '')), duration: 0, isLocal: true, isUrl: true });
             }
             if (t.cover) return utils.normalizeTrack(t);
-            const cover = await utils.findCover(t.title, t.artist);
-            return utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, cover, preview: '/local-file?p=' + encodeURIComponent(t.filename), duration: Math.floor(t.duration || 30), isLocal: true });
+                const cover = (await require('./playlists.js').embeddedCover(t.filename)) || await utils.findCover(t.title, t.artist);
+                return utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, cover, preview: '/local-file?p=' + encodeURIComponent(t.filename), duration: Math.floor(t.duration || 30), isLocal: true });
         }));
         res.json({ data: enriched, total, page, pages: Math.ceil(total / perPage) });
     } catch (e) { console.error('[local-tracks]', e.message); res.status(500).json({ error: 'Ошибка' }); }
@@ -110,6 +110,7 @@ module.exports = function (app, utils) {
                     .map(t => utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, duration: Math.floor(t.duration || 30), cover: t.cover || '', preview: '/local-file?p=' + encodeURIComponent(t.filename), isLocal: true, isUrl: false }));
             } catch (e) { console.error('[search] playlist fail:', e.message); }
         }
+        await Promise.all(localMatches.map(async t => { if (!t.cover && t.filename) t.cover = await require('./playlists.js').resolveLocalCover(t); }));
         if (owner) {
             urltracks.listFor(owner).forEach(t => {
                 if ((utils.normalizeStr(t.title) || '').includes(nq) || (utils.normalizeStr(t.artist || '') || '').includes(nq)) {
@@ -208,6 +209,134 @@ module.exports = function (app, utils) {
         try { res.json(await resolver.resolveAudioUrl((req.body || {}).url)); }
         catch (e) { res.json({ ok: false, error: 'Ошибка проверки ссылки' }); }
     });
+    // ===== Добавление музыки файлом =====
+const musicTempDir = path.join(require('./config.js').DATA_DIR, 'music-temp');
+const coversDir = path.join(require('./config.js').DATA_DIR, 'covers');
+if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
+app.use('/covers', require('express').static(coversDir));
+if (!fs.existsSync(musicTempDir)) fs.mkdirSync(musicTempDir, { recursive: true });
+const uploadMusic = multer({ storage: multer.diskStorage({ destination: (r, f, cb) => cb(null, musicTempDir), filename: (r, f, cb) => cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(f.originalname)) }), limits: { fileSize: 1024 * 1024 * 1024 } });
+app.post('/api/upload-music', (req, res, next) => {
+    uploadMusic.single('file')(req, res, (err) => { if (err) return res.status(413).json({ error: 'Файл слишком большой' }); next(); });
+}, async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+    const fp = path.join(musicTempDir, req.file.filename);
+    let title = null, artist = null, album = null, coverUrl = '';
+    try {
+        const mm = require('music-metadata');
+        const m = await mm.parseFile(fp);
+        title = m.common.title || null; artist = m.common.artist || null; album = m.common.album || null;
+        if (m.common.picture && m.common.picture.length) {
+            const pic = m.common.picture[0];
+            const cname = 'emb-' + Date.now() + '-' + Math.round(Math.random() * 1e9) + (pic.format === 'image/png' ? '.png' : '.jpg');
+            fs.writeFileSync(path.join(coversDir, cname), Buffer.from(pic.data));
+            coverUrl = '/covers/' + cname;
+        }
+    } catch (e) {}
+    if (!title) { const b = path.parse(req.file.originalname).name; if (b.includes('-')) { const p = b.split('-'); artist = artist || p[0].trim(); title = p.slice(1).join('-').trim(); } else title = b; }
+    res.json({ success: true, id: req.file.filename, title: title || 'Без названия', artist: artist || 'Unknown Artist', album: album || '', cover: coverUrl });
+});
+app.post('/api/confirm-music', require('express').json(), async (req, res) => {
+    const { id, title, artist, album, owner, cover } = req.body || {};
+    if (!id || !title || !/^[0-9]+-[0-9]+\.[a-z0-9]+$/i.test(id)) return res.status(400).json({ error: 'Нет данных' });
+    const src = path.join(musicTempDir, id);
+    if (!fs.existsSync(src)) return res.status(404).json({ error: 'Временный файл устарел, выбери заново' });
+    const ext = path.extname(id) || '.mp3';
+    const safe = s => String(s || '').replace(/[\\/:*?"<>|]/g, '').trim() || 'track';
+    const dir = require('./config.js').getCustomMusicDir();
+    let name = safe(artist) + ' - ' + safe(title) + ext;
+    let dest = path.join(dir, name); let i = 1;
+    while (fs.existsSync(dest)) { name = safe(artist) + ' - ' + safe(title) + ' (' + (i++) + ')' + ext; dest = path.join(dir, name); }
+    fs.copyFileSync(src, dest); try { fs.unlinkSync(src); } catch (e) {}
+    try { utils.getLocalTracks(true); } catch (e) {}
+    if (cover) { try { require('./playlists.js').setOverride(name, { cover: cover }); } catch (e) {} }
+    // Новая песня — ВЫКЛЮЧЕНА во всех плейлистах комнаты, где есть владелец
+    if (ROOMS && owner) {
+        Object.keys(ROOMS).forEach(code => {
+            const room = ROOMS[code];
+            if (!room || !room.users.some(u => u.name === owner)) return;
+            (room.playlists || []).forEach(pl => {
+                if (pl.includeAll && pl.includeAll[owner]) { pl.excluded = pl.excluded || {}; pl.excluded['local|' + name] = true; }
+            });
+        });
+    }
+    res.json({ success: true, filename: name });
+});
+app.post('/api/update-track', require('express').json(), async (req, res) => {
+    const { type, id, owner, data } = req.body || {};
+    if (!type || !id || !owner || !data) return res.status(400).json({ error: 'Нет данных' });
+    if (type === 'url') {
+        const ut = require('./urltracks.js');
+        const upd = { id, title: data.title, artist: data.artist, album: data.album, cover: data.cover };
+        if (data.url) upd.url = data.url;
+        const updated = ut.update(owner, upd);
+        if (!updated) return res.status(404).json({ error: 'Трек не найден' });
+        } else if (type === 'shared') {
+        require('./playlists.js').setOverride('shared|' + owner + '|' + id, data);
+    } else if (type === 'local') {
+        const PL = require('./playlists.js');
+        const ovr = {};
+        if (data.title) ovr.title = data.title;
+        if (data.artist) ovr.artist = data.artist;
+        if (data.album) ovr.album = data.album;
+        if (data.cover !== undefined) ovr.cover = data.cover;
+        PL.setOverride(id, ovr);
+    } else return res.status(400).json({ error: 'Неизвестный тип' });
+    res.json({ success: true });
+});
+app.get('/api/my-tracks', async (req, res) => {
+    const owner = (req.query.owner || '').trim();
+    try {
+        const ip = String(req.ip || '');
+        const isLocal = ip === '127.0.0.1' || ip === '::1' || ip.startsWith('::ffff:127.');
+        const PL = require('./playlists.js');
+        const ovr = PL.loadOverrides();
+        let local = [];
+        if (isLocal) {
+            const all = await utils.getLocalTracks();
+            local = await Promise.all(all.map(async t => {
+                const o = ovr[t.filename] || {};
+                let cover = '';
+                try { cover = await PL.resolveLocalCover(t); } catch (e) { cover = t.cover || ''; }
+                return { type: 'local', filename: t.filename, title: o.title || t.title, artist: o.artist || t.artist, album: o.album || t.album || '', cover, duration: Math.floor(t.duration || 0) };
+            }));
+        }
+        const urls = [];
+        for (const t of require('./urltracks.js').listFor(owner)) {
+            let cover = t.cover || '';
+            if (!cover && t.autoCover) { try { cover = await utils.findCover(t.title, t.artist); } catch (e) {} }
+                        urls.push({ type: 'url', id: t.id, title: t.title, artist: t.artist, album: t.album || '', cover, url: t.url || '', duration: 0 });
+        }
+                const shared = [];
+        const roomCode = (req.query.room || '').toUpperCase();
+        const room = ROOMS && ROOMS[roomCode];
+        if (room && room.sharedMusic && room.sharedMusic[owner]) {
+            room.sharedMusic[owner].tracks.forEach(t => {
+                const o = ovr['shared|' + owner + '|' + t.file] || {};
+                shared.push({ type: 'shared', file: t.file, title: o.title || t.title, artist: o.artist || t.artist, album: '', cover: o.cover || t.cover || '', duration: 0 });
+            });
+        }
+        res.json({ data: [...local, ...urls, ...shared] });
+    } catch (e) { console.error('[my-tracks]', e.message); res.status(500).json({ error: e.message }); }
+});
+app.post('/api/delete-track', require('express').json(), async (req, res) => {
+    const { type, id, owner } = req.body || {};
+    if (!type || !id) return res.status(400).json({ error: 'Нет данных' });
+    try {
+        if (type === 'url') {
+            const removed = require('./urltracks.js').remove(owner || '', id);
+            if (!removed) return res.status(404).json({ error: 'Не найдено' });
+        } else if (type === 'local') {
+            const dir = require('./config.js').getCustomMusicDir();
+            const full = path.resolve(path.join(dir, id));
+            if (!full.startsWith(path.resolve(dir) + path.sep) || !fs.existsSync(full)) return res.status(404).json({ error: 'Файл не найден' });
+            fs.unlinkSync(full);
+            try { utils.getLocalTracks(true); } catch (e) {}
+            try { require('./playlists.js').removeOverride(id); } catch (e) {}
+        } else return res.status(400).json({ error: 'Неизвестный тип' });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'Ошибка удаления' }); }
+});
 
     app.get('/api/music-dir', (req, res) => { res.json({ dir: require('./config.js').getCustomMusicDir() }); });
     app.post('/api/music-dir', require('express').json(), (req, res) => {

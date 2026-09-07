@@ -191,7 +191,7 @@ document.querySelectorAll('.pl-arrow').forEach(b=>{b.style.display=(roomPlaylist
 function viewPlaylist(dir){if(!roomPlaylists.length)return;let i=roomPlaylists.findIndex(p=>p.id===viewPlaylistId);if(i<0)i=0;i=(i+dir+roomPlaylists.length)%roomPlaylists.length;viewPlaylistId=roomPlaylists[i].id;renderPlaylistBar();}
 function selectPlaylist(){if(myRole==='admin'||isMod){socket.emit('set-playlist',viewPlaylistId);}else{openPlaylistView();}}
 function createPlaylist(){socket.emit('create-playlist');}
-function openPlaylistSettings(id){if(myRole!=='admin'&&!isMod)return;const pl=roomPlaylists.find(p=>p.id===(id||viewPlaylistId||activePlaylistId));if(!pl)return;plEdit=JSON.parse(JSON.stringify(pl));document.getElementById('pl-name-input').value=plEdit.name;document.getElementById('pl-name-input').disabled=!!plEdit.classic;const db=document.getElementById('pl-delete-btn');if(db)db.style.display=plEdit.classic?'none':'inline-block';document.getElementById('pl-tracks-col').style.display='none';renderPlUsers();document.getElementById('playlist-modal').classList.add('open');}
+function openPlaylistSettings(id){if(myRole!=='admin'&&!isMod)return;const pl=roomPlaylists.find(p=>p.id===(id||viewPlaylistId||activePlaylistId));if(!pl)return;plEdit=JSON.parse(JSON.stringify(pl));plEdit.excluded=plEdit.excluded||{};document.getElementById('pl-name-input').value=plEdit.name;document.getElementById('pl-name-input').disabled=!!plEdit.classic;const db=document.getElementById('pl-delete-btn');if(db)db.style.display=plEdit.classic?'none':'inline-block';document.getElementById('pl-tracks-col').style.display='none';renderPlUsers();document.getElementById('playlist-modal').classList.add('open');}
 function closePlaylistSettings(){document.getElementById('playlist-modal').classList.remove('open');plEdit=null;}
 function renderPlUsers(){
 const list=document.getElementById('pl-users-list');list.innerHTML='';
@@ -238,7 +238,7 @@ const list=document.getElementById('pl-tracks-list');list.innerHTML='';
 const hostU=(lastUsersList||[]).find(u=>u.isAdmin);
 if(nick!==(hostU?hostU.name:'')){
 const row=document.createElement('div');row.style.padding='6px';
-const sb=document.createElement('button');sb.className='pl-share-btn';sb.textContent='📤 Запросить шаринг музыки';
+const sb=document.createElement('button');sb.className='pl-share-btn';sb.textContent='📤 Запросить треки музыки';
 sb.onclick=()=>{socket.emit('request-share',nick);showToast('📤 Запрос отправлен: '+nick);};
 row.appendChild(sb);list.appendChild(row);
 }
@@ -246,8 +246,8 @@ const mk=(t,key,pre)=>{
 const row=document.createElement('div');row.className='pl-user-row';
 const nm=document.createElement('span');nm.style.flex='1';nm.textContent=pre+(t.title||'');
 const cb=document.createElement('input');cb.type='checkbox';cb.className='pl-checkbox';
-cb.checked=includeAll||!!plEdit.selected[key];
-cb.onchange=()=>{if(cb.checked)plEdit.selected[key]=true;else delete plEdit.selected[key];};
+cb.checked=includeAll?!plEdit.excluded[key]:!!plEdit.selected[key];
+cb.onchange=()=>{if(includeAll){if(cb.checked)delete plEdit.excluded[key];else plEdit.excluded[key]=true;}else{if(cb.checked)plEdit.selected[key]=true;else delete plEdit.selected[key];}};
 row.appendChild(nm);row.appendChild(cb);list.appendChild(row);
 };
 const h1=document.createElement('div');h1.className='pl-col-title';h1.textContent='СКАЧАННЫЕ';list.appendChild(h1);
@@ -256,7 +256,7 @@ plTracksData.local.filter(t=>!f||(t.title||'').toLowerCase().includes(f)).forEac
 const h2=document.createElement('div');h2.className='pl-col-title';h2.textContent='URL';list.appendChild(h2);
 plTracksData.urls.filter(t=>!f||(t.title||'').toLowerCase().includes(f)).forEach(t=>mk(t,'url|'+nick+'|'+t.id,'🔗 '));
 }
-function savePlaylistSettings(){if(!plEdit)return;socket.emit('update-playlist',{id:plEdit.id,name:document.getElementById('pl-name-input').value.trim()||plEdit.name,includeAll:plEdit.includeAll,selected:plEdit.selected});closePlaylistSettings();}
+function savePlaylistSettings(){if(!plEdit)return;socket.emit('update-playlist',{id:plEdit.id,name:document.getElementById('pl-name-input').value.trim()||plEdit.name,includeAll:plEdit.includeAll,selected:plEdit.selected,excluded:plEdit.excluded});closePlaylistSettings();}
 function deletePlaylist(){if(!plEdit||plEdit.classic)return;const id=plEdit.id;const name=plEdit.name;closePlaylistSettings();showConfirm('🗑','Удалить плейлист?','Плейлист «'+name+'» будет удалён.',()=>{socket.emit('delete-playlist',{id:id});});}
 function openPlaylistView(){
 socket.emit('get-playlist-view',function(groups){

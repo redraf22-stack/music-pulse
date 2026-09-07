@@ -133,6 +133,10 @@ ipcMain.handle('start-music-share', async () => {
             if (!title) { if (b.includes('-')) { const p = b.split('-'); artist = artist || p[0].trim(); title = p.slice(1).join('-').trim(); } else title = b; }
             list.push({ file: f, title, artist: artist || 'Unknown Artist' });
         }
+                let ovr = {}; try { ovr = JSON.parse(fsMain.readFileSync(path.join(app.getPath('userData'), 'music-overrides.json'), 'utf8')); } catch (e) {}
+        const lanIp = (() => { const os = require('os'); const nets = os.networkInterfaces(); for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) return n.address; return '127.0.0.1'; })();
+        const protoS = localServer && localServer.isHttps ? 'https' : 'http';
+        list.forEach(it => { const o = ovr[it.file]; if (o) { if (o.title) it.title = o.title; if (o.artist) it.artist = o.artist; if (o.cover) it.cover = o.cover.startsWith('http') ? o.cover : (protoS + '://' + lanIp + ':3001' + o.cover); } });
         const srv = http.createServer((req, res) => {
             res.setHeader('Access-Control-Allow-Origin', '*');
             if (req.url === '/list.json') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(list)); }
