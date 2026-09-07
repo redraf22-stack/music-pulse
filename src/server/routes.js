@@ -36,6 +36,8 @@ module.exports = function (app, utils) {
     });
 
     app.get('/api/debug-music', async (req, res) => {
+        const ip = String(req.ip || '');
+        if (ip !== '127.0.0.1' && ip !== '::1' && !ip.startsWith('::ffff:127.')) return res.status(403).send('Forbidden');
         const dir = require('./config.js').getCustomMusicDir();
         const tracks = await utils.getLocalTracks(true);
         res.json({ dir: dir, count: tracks.length, sample: tracks.slice(0, 3).map(t => t.filename) });
@@ -84,7 +86,7 @@ module.exports = function (app, utils) {
                 return utils.normalizeTrack({ id: 'url-' + (t.id || t.filename), title: t.title, artist: t.artist, cover, preview: t.preview || ('/url-proxy?url=' + encodeURIComponent(t.rawUrl || t.url || '')), duration: 0, isLocal: true, isUrl: true });
             }
             if (t.cover) return utils.normalizeTrack(t);
-                const cover = (await require('./playlists.js').embeddedCover(t.filename)) || await utils.findCover(t.title, t.artist);
+                const cover = await require('./playlists.js').resolveLocalCover({ filename: t.filename, title: t.title, artist: t.artist, cover: t.cover });
                 return utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, cover, preview: '/local-file?p=' + encodeURIComponent(t.filename), duration: Math.floor(t.duration || 30), isLocal: true });
         }));
         res.json({ data: enriched, total, page, pages: Math.ceil(total / perPage) });
@@ -110,7 +112,6 @@ module.exports = function (app, utils) {
                     .map(t => utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, duration: Math.floor(t.duration || 30), cover: t.cover || '', preview: '/local-file?p=' + encodeURIComponent(t.filename), isLocal: true, isUrl: false }));
             } catch (e) { console.error('[search] playlist fail:', e.message); }
         }
-        await Promise.all(localMatches.map(async t => { if (!t.cover && t.filename) t.cover = await require('./playlists.js').resolveLocalCover(t); }));
         if (owner) {
             urltracks.listFor(owner).forEach(t => {
                 if ((utils.normalizeStr(t.title) || '').includes(nq) || (utils.normalizeStr(t.artist || '') || '').includes(nq)) {
@@ -138,15 +139,15 @@ module.exports = function (app, utils) {
 
         // 3. Обложки для fixed (только 1-я страница)
         if (page === 1) {
-    const coverMap = new Map();
-    dzTracks.forEach(d => coverMap.set(utils.normalizeStr(d.title) + '|' + utils.normalizeStr((d.artist && d.artist.name) || ''), (d.album && (d.album.cover_medium || d.album.cover_small)) || ''));
-    await Promise.all(fixed.map(async t => {
-        if (!t.cover) {
-            const key = utils.normalizeStr(t.title) + '|' + utils.normalizeStr((t.artist && t.artist.name) || '');
-            t.cover = coverMap.get(key) || await utils.findCover(t.title, (t.artist && t.artist.name) || '');
+            const coverMap = new Map();
+            dzTracks.forEach(d => coverMap.set(utils.normalizeStr(d.title) + '|' + utils.normalizeStr((d.artist && d.artist.name) || ''), (d.album && (d.album.cover_medium || d.album.cover_small)) || ''));
+            await Promise.all(fixed.map(async t => {
+                if (!t.cover) {
+                    const key = utils.normalizeStr(t.title) + '|' + utils.normalizeStr((t.artist && t.artist.name) || '');
+                    t.cover = coverMap.get(key) || await utils.findCover(t.title, (t.artist && t.artist.name) || '');
+                }
+            }));
         }
-    }));
-}
 
         // 4. Страница: ровно 5 карточек. Стр.1: fixed сверху + deezer. Стр.2+: deezer со смещением
         let data;
@@ -197,7 +198,12 @@ module.exports = function (app, utils) {
         } catch (e) { console.error('[url-proxy] FAIL', url, e.message); res.status(502).send('Ошибка аудио'); }
     });
 
-    app.get('/api/url-tracks', (req, res) => { res.json({ data: urltracks.listFor((req.query.owner || '').trim()) }); });
+    app.get('/api/url-tracks', (req, res) => {
+        const owner = (req.query.owner || '').trim();
+        const nick = (req.query.nick || '').trim();
+        if (nick && nick !== owner) return res.status(403).send('Forbidden');
+        res.json({ data: urltracks.listFor(owner) });
+    });
     app.post('/api/url-track', require('express').json(), (req, res) => {
         const { owner, title, artist, album, url, cover, autoCover } = req.body || {};
         if (!owner || !title || !url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Нужны ник, название и корректный URL' });
@@ -271,7 +277,7 @@ app.post('/api/update-track', require('express').json(), async (req, res) => {
         if (data.url) upd.url = data.url;
         const updated = ut.update(owner, upd);
         if (!updated) return res.status(404).json({ error: 'Трек не найден' });
-        } else if (type === 'shared') {
+    } else if (type === 'shared') {
         require('./playlists.js').setOverride('shared|' + owner + '|' + id, data);
     } else if (type === 'local') {
         const PL = require('./playlists.js');

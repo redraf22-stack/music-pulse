@@ -186,7 +186,33 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             if (!target) return;
             io.to(target.id).emit('share-requested', { requester: socket.nickname });
         });
-        socket.on('tracks-changed', () => { if (!socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; PL.getPlaylist(room); broadcastPlaylists(socket.roomCode); io.to(socket.roomCode).emit('tracks-refresh'); });
+        socket.on('tracks-changed', async () => {
+    if (!socket.roomCode) return;
+    const room = rooms[socket.roomCode];
+    if (!room) return;
+    
+    // Если сейчас что-то играет — пересчитываем метаданные и эмитим sync
+    if (room.state.trackUrl) {
+        try {
+            const tracks = await PL.resolveTracks(room, true);
+            const current = tracks.find(t => t.preview === room.state.trackUrl);
+            if (current) {
+                const newName = current.title || '';
+                const newArtist = (current.artist && current.artist.name) || current.artist || '';
+                const newCover = current.cover || '';
+                const oldName = room.state.trackName || '';
+                const oldArtist = (room.state.trackArtist && room.state.trackArtist.name) || room.state.trackArtist || '';
+                if (newName !== oldName || newArtist !== oldArtist || newCover !== room.state.trackCover) {
+                    room.state.trackName = newName;
+                    room.state.trackArtist = { name: newArtist };
+                    room.state.trackCover = newCover;
+                    io.to(socket.roomCode).emit('sync', { ...room.state, playHistory: room.playHistory || [] });
+                }
+            }
+        } catch (e) { console.error('[tracks-changed]', e.message); }
+    }
+    io.to(socket.roomCode).emit('tracks-refresh');
+});
         socket.on('get-playlists', () => { if (!socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; PL.getPlaylist(room); socket.emit('playlists-update', { list: room.playlists, active: room.activePlaylistId }); });
         socket.on('get-playlist-view', async (cb) => {
     if (typeof cb !== 'function' || !socket.roomCode) return;

@@ -6,6 +6,8 @@ const app = express();
 // 🔍 Диагностика: видит ли сервер файлы
 // 🔍 Отладка: покажет откуда сервер раздаёт файлы
 app.get('/debug', (req, res) => {
+    const ip = String(req.ip || '');
+    if (ip !== '127.0.0.1' && ip !== '::1' && !ip.startsWith('::ffff:127.')) return res.status(403).send('Forbidden');
     res.json({
         SRC_DIR: config.SRC_DIR,
         js_folder: fs.existsSync(path.join(config.SRC_DIR, 'js')),

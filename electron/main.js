@@ -67,19 +67,38 @@ function createWindow() {
     });
     mainWindow.loadFile(path.join(__dirname, '../src/start.html'));
     if (!process.argv.includes('--dev')) {
-    setTimeout(() => {
-        autoUpdater.checkForUpdatesAndNotify();
-        autoUpdater.on('update-downloaded', () => {
+        let updateDownloaded = false;
+        let updateDialogShown = false;
+
+        const showUpdateDialog = () => {
+            if (updateDialogShown || !mainWindow) return;
+            updateDialogShown = true;
             const { dialog } = require('electron');
             dialog.showMessageBox(mainWindow, {
                 type: 'info', title: 'Обновление готово',
-                message: 'Новая версия MusicPulse скачана. Перезапустить?',
+                message: 'Новая версия MusicPulse скачана. Перезапустить сейчас?',
                 buttons: ['Перезапустить', 'Позже']
-            }).then(r => { if (r.response === 0) autoUpdater.quitAndInstall(); });
+            }).then(r => {
+                updateDialogShown = false;
+                if (r.response === 0) autoUpdater.quitAndInstall();
+            });
+        };
+
+        autoUpdater.on('update-downloaded', () => {
+            updateDownloaded = true;
+            showUpdateDialog();
         });
         autoUpdater.on('error', e => console.error('Update error:', e.message));
-    }, 3000);
-}
+
+        // Сразу при входе — проверяем обновления
+        setTimeout(() => { autoUpdater.checkForUpdates(); }, 2000);
+
+        // Каждые 30 минут: напоминаем, если уже скачано; иначе проверяем снова
+        setInterval(() => {
+            if (updateDownloaded) showUpdateDialog();
+            else autoUpdater.checkForUpdates();
+        }, 30 * 60 * 1000);
+    }
     if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
     mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -133,7 +152,7 @@ ipcMain.handle('start-music-share', async () => {
             if (!title) { if (b.includes('-')) { const p = b.split('-'); artist = artist || p[0].trim(); title = p.slice(1).join('-').trim(); } else title = b; }
             list.push({ file: f, title, artist: artist || 'Unknown Artist' });
         }
-                let ovr = {}; try { ovr = JSON.parse(fsMain.readFileSync(path.join(app.getPath('userData'), 'music-overrides.json'), 'utf8')); } catch (e) {}
+                let ovr = {}; try { ovr = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'music-overrides.json'), 'utf8')); } catch (e) {}
         const lanIp = (() => { const os = require('os'); const nets = os.networkInterfaces(); for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) return n.address; return '127.0.0.1'; })();
         const protoS = localServer && localServer.isHttps ? 'https' : 'http';
         list.forEach(it => { const o = ovr[it.file]; if (o) { if (o.title) it.title = o.title; if (o.artist) it.artist = o.artist; if (o.cover) it.cover = o.cover.startsWith('http') ? o.cover : (protoS + '://' + lanIp + ':3001' + o.cover); } });
@@ -172,7 +191,6 @@ ipcMain.handle('get-lan-ip', () => {
     for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) return n.address;
     return '127.0.0.1';
 });
-const fsMain = require('fs');
 const MUSIC_SETTINGS = path.join(app.getPath('userData'), 'settings.json');
 function readMusicSettings() { try { return JSON.parse(fsMain.readFileSync(MUSIC_SETTINGS, 'utf8')); } catch (e) { return {}; } }
 function readMusicDir() { return readMusicSettings().musicDir || ''; }

@@ -41,6 +41,7 @@ async function getLocalTracks(force) {
 }
 const coverCache = {};
 async function findCover(title, artist) {
+    artist = (artist && typeof artist === 'object') ? (artist.name || '') : (artist || '');
     const key = `${normalizeStr(artist)}-${normalizeStr(title)}`;
     if (coverCache[key] !== undefined) return coverCache[key];
     let cover = null;
