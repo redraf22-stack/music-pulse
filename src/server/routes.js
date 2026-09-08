@@ -279,24 +279,35 @@ app.post('/api/update-track', require('express').json(), async (req, res) => {
         if (!updated) return res.status(404).json({ error: 'Трек не найден' });
     } else if (type === 'shared') {
         require('./playlists.js').setOverride('shared|' + owner + '|' + id, data);
-    } else if (type === 'local') {
+        } else if (type === 'local') {
         const PL = require('./playlists.js');
-        const ovr = {};
-        if (data.title) ovr.title = data.title;
-        if (data.artist) ovr.artist = data.artist;
-        if (data.album) ovr.album = data.album;
-        if (data.cover !== undefined) {
-            const prev = PL.loadOverrides()[id] || {};
-            if (data.cover === '') {
-                if (prev.cover) ovr.prevCover = prev.cover;
-                else if (prev.prevCover) ovr.prevCover = prev.prevCover;
-                else { try { const emb = await PL.embeddedCover(id); if (emb) ovr.prevCover = emb; } catch (e) {} }
-                ovr.cover = '';
-            } else {
-                ovr.cover = data.cover;
+        if (data.resetCover) {
+            const cur = PL.loadOverrides()[id] || {};
+            delete cur.cover; delete cur.prevCover;
+            PL.replaceOverride(id, cur);
+            const ovr2 = {};
+            if (data.title) ovr2.title = data.title;
+            if (data.artist) ovr2.artist = data.artist;
+            if (data.album) ovr2.album = data.album;
+            PL.setOverride(id, ovr2);
+        } else {
+            const ovr = {};
+            if (data.title) ovr.title = data.title;
+            if (data.artist) ovr.artist = data.artist;
+            if (data.album) ovr.album = data.album;
+            if (data.cover !== undefined) {
+                const prev = PL.loadOverrides()[id] || {};
+                if (data.cover === '') {
+                    if (prev.cover) ovr.prevCover = prev.cover;
+                    else if (prev.prevCover) ovr.prevCover = prev.prevCover;
+                    else { try { const emb = await PL.embeddedCover(id); if (emb) ovr.prevCover = emb; } catch (e) {} }
+                    ovr.cover = '';
+                } else {
+                    ovr.cover = data.cover;
+                }
             }
+            PL.setOverride(id, ovr);
         }
-        PL.setOverride(id, ovr);
     } else return res.status(400).json({ error: 'Неизвестный тип' });
     res.json({ success: true });
 });

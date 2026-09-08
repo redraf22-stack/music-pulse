@@ -143,22 +143,31 @@ ipcMain.handle('start-music-share', async () => {
         const http = require('http');
         const mm = require('music-metadata');
         const dir = readMusicDir() || path.join(app.getPath('userData'), 'music');
-        const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f)) : [];
-        const list = [];
-        for (const f of files) {
-            let title = null, artist = null;
-            try { const m = await mm.parseFile(path.join(dir, f)); title = m.common.title || null; artist = m.common.artist || null; } catch (e) {}
-            const b = path.parse(f).name;
-            if (!title) { if (b.includes('-')) { const p = b.split('-'); artist = artist || p[0].trim(); title = p.slice(1).join('-').trim(); } else title = b; }
-            list.push({ file: f, title, artist: artist || 'Unknown Artist' });
+        async function buildShareList() {
+            const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f)) : [];
+            let ovr = {}; try { ovr = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'music-overrides.json'), 'utf8')); } catch (e) {}
+            const lanIp = (() => { const os = require('os'); const nets = os.networkInterfaces(); for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) return n.address; return '127.0.0.1'; })();
+            const protoS = localServer && localServer.isHttps ? 'https' : 'http';
+            const list = [];
+            for (const f of files) {
+                let title = null, artist = null;
+                try { const m = await mm.parseFile(path.join(dir, f)); title = m.common.title || null; artist = m.common.artist || null; } catch (e) {}
+                const b = path.parse(f).name;
+                if (!title) { if (b.includes('-')) { const p = b.split('-'); artist = artist || p[0].trim(); title = p.slice(1).join('-').trim(); } else title = b; }
+                const it = { file: f, title, artist: artist || 'Unknown Artist' };
+                const o = ovr[f];
+                if (o) { if (o.title) it.title = o.title; if (o.artist) it.artist = o.artist; if (o.cover) it.cover = o.cover.startsWith('http') ? o.cover : (protoS + '://' + lanIp + ':3001' + o.cover); }
+                list.push(it);
+            }
+            return list;
         }
-                let ovr = {}; try { ovr = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'music-overrides.json'), 'utf8')); } catch (e) {}
-        const lanIp = (() => { const os = require('os'); const nets = os.networkInterfaces(); for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) return n.address; return '127.0.0.1'; })();
-        const protoS = localServer && localServer.isHttps ? 'https' : 'http';
-        list.forEach(it => { const o = ovr[it.file]; if (o) { if (o.title) it.title = o.title; if (o.artist) it.artist = o.artist; if (o.cover) it.cover = o.cover.startsWith('http') ? o.cover : (protoS + '://' + lanIp + ':3001' + o.cover); } });
         const srv = http.createServer((req, res) => {
             res.setHeader('Access-Control-Allow-Origin', '*');
-            if (req.url === '/list.json') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(list)); }
+            if (req.url === '/list.json') {
+                res.setHeader('Content-Type', 'application/json');
+                buildShareList().then(l => res.end(JSON.stringify(l))).catch(() => res.end('[]'));
+                return;
+            }
             const fp = path.join(dir, decodeURIComponent(req.url.replace(/^\//, '').split('?')[0]));
             if (!fp.startsWith(dir) || !fs.existsSync(fp)) { res.statusCode = 404; return res.end(); }
             try {

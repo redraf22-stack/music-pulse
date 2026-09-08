@@ -33,6 +33,7 @@ async function resolveLocalCover(t) {
     if (t.cover) return t.cover;
     return (await embeddedCover(t.filename)) || await utils.findCover(t.title, t.artist);
 }
+function replaceOverride(filename, data){ const o = loadOverrides(); o[filename] = Object.assign({}, data); fs.writeFileSync(OVR_FILE, JSON.stringify(o, null, 2)); }
 function loadOverrides(){ try { return JSON.parse(fs.readFileSync(OVR_FILE, 'utf8')); } catch (e) { return {}; } }
 function setOverride(filename, data){ const o = loadOverrides(); o[filename] = Object.assign(o[filename] || {}, data); fs.writeFileSync(OVR_FILE, JSON.stringify(o, null, 2)); }
 function removeOverride(filename){ const o = loadOverrides(); delete o[filename]; fs.writeFileSync(OVR_FILE, JSON.stringify(o, null, 2)); }
@@ -72,4 +73,4 @@ async function resolveTracks(room, withCovers) {
 }));
     return out;
 }
-module.exports = { defaultPlaylists, getPlaylist, hostNickOf, getUserTracks, resolveTracks, getOverride, setOverride, loadOverrides, removeOverride, embeddedCover, resolveLocalCover };
+module.exports = { defaultPlaylists, getPlaylist, hostNickOf, getUserTracks, resolveTracks, getOverride, setOverride, loadOverrides, removeOverride, embeddedCover, resolveLocalCover, replaceOverride };

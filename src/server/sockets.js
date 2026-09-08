@@ -211,25 +211,28 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             }
         } catch (e) { console.error('[tracks-changed]', e.message); }
     }
-    io.to(socket.roomCode).emit('tracks-refresh');
-});
+            broadcastPlaylists(socket.roomCode);
+            io.to(socket.roomCode).emit('tracks-refresh');
+        });
         socket.on('get-playlists', () => { if (!socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; PL.getPlaylist(room); socket.emit('playlists-update', { list: room.playlists, active: room.activePlaylistId }); });
         socket.on('get-playlist-view', async (cb) => {
-    if (typeof cb !== 'function' || !socket.roomCode) return;
-    const room = rooms[socket.roomCode]; if (!room) return cb([]);
-    try {
-        const tracks = await PL.resolveTracks(room, true);
-        const map = new Map();
-        tracks.forEach(t => {
-            const owner = t.owner || '?';
-            if (!map.has(owner)) map.set(owner, { owner, local: [], urls: [] });
-            const g = map.get(owner);
-            const item = { title: (t.title || '').trim() || 'Без названия', artist: ((t.artist && t.artist.name) || t.artist || '').trim() || 'Unknown Artist' };
-            if (t.isUrl) g.urls.push(item); else g.local.push(item);
+            if (typeof cb !== 'function' || !socket.roomCode) return cb([]);
+            const room = rooms[socket.roomCode];
+            if (!room) return cb([]);
+            try {
+                const tracks = await PL.resolveTracks(room, false);
+                const map = new Map();
+                tracks.forEach(t => {
+                    const owner = t.owner || '?';
+                    if (!map.has(owner)) map.set(owner, { owner, local: [], urls: [] });
+                    const g = map.get(owner);
+                    const title = String(t.title || '').trim() || 'Без названия';
+                    const artist = String((t.artist && t.artist.name) || t.artist || '').trim();
+                    if (t.isUrl) g.urls.push({ title, artist }); else g.local.push({ title, artist });
+                });
+                cb([...map.values()]);
+            } catch (e) { console.error('[get-playlist-view]', e.message); cb([]); }
         });
-        cb([...map.values()]);
-    } catch (e) { cb([]); }
-});
         socket.on('set-playlist', id => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; PL.getPlaylist(room); if (room.playlists.find(p => p.id === id)) { room.activePlaylistId = id; broadcastPlaylists(socket.roomCode); } });
         socket.on('delete-playlist', data => {
             if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return;

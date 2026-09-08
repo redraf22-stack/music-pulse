@@ -61,7 +61,7 @@ const urlChanged=ns&&audio.src!==ns;
 if(ns&&(urlChanged||identityChanged)){
 trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';
 audio.pause();audio.src=ns;audio.load();
-const onReady=()=>{if(audio.readyState<2){setTimeout(onReady,100);return;}if(audio.duration&&state.currentTime>=0){try{audio.currentTime=state.currentTime;}catch(e){}}if(state.playing&&isReady){audio.play().then(()=>{if(myRole==='admin'||isMod)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});}).catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
+const onReady=()=>{if(audio.readyState<2){setTimeout(onReady,100);return;}let pos=state.currentTime||0;if(state.playing&&state.startedAt){pos=(Date.now()+serverTimeOffset-state.startedAt)/1000;}if(audio.duration&&pos>0){try{audio.currentTime=Math.min(pos,Math.max(0,audio.duration-0.1));}catch(e){}}if(state.playing&&isReady){audio.play().then(()=>{if(myRole==='admin'||isMod)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});}).catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
 audio.addEventListener('canplay',onReady,{once:true});
 audio.addEventListener('loadedmetadata',onReady,{once:true});
 setTimeout(()=>{if(trackChanging){trackChanging=false;showToast(translate('load_problem'),true);}},60000);
@@ -69,11 +69,11 @@ return;
 }
 if(!trackChanging&&state.trackUrl){
 if(state.isSeek&&audio.readyState>=2){audio.currentTime=state.currentTime;lastSyncTime=Date.now();}
-else if(!isSeeking&&Date.now()-trackLoadedAt>5000){
+else if(!isSeeking&&Date.now()-trackLoadedAt>2500){
 const expected=(state.playing&&state.startedAt)?(Date.now()+serverTimeOffset-state.startedAt)/1000:(state.currentTime||0);
 if(expected>=0&&(!audio.duration||expected<=audio.duration)){
 const diff=Math.abs(audio.currentTime-expected);
-if(diff>2&&audio.readyState>=2){audio.currentTime=expected;}
+if(diff>0.6&&audio.readyState>=2){audio.currentTime=expected;}
 }
 }
 }
@@ -287,7 +287,13 @@ e.target.value='';
 async function saveEditTrack(){
 if(!editingTrack)return;
 const autoChecked=document.getElementById('et-auto-cover').checked;
-const data={title:document.getElementById('et-title').value.trim()||editingTrack.title,artist:document.getElementById('et-artist').value.trim()||'Unknown Artist',album:document.getElementById('et-album').value.trim()||'',cover:autoChecked?'':(editingTrack._newCover||editingTrack.prevCover||editingTrack.cover||''),autoCover:autoChecked,url:(document.getElementById('et-url')?document.getElementById('et-url').value.trim():'')};
+let coverVal,resetCover=false;
+if(autoChecked){coverVal='';}
+else if(editingTrack._newCover){coverVal=editingTrack._newCover;}
+else if(editingTrack.prevCover){coverVal=editingTrack.prevCover;}
+else if(editingTrack.autoCover){resetCover=true;coverVal='';}
+else{coverVal=editingTrack.cover||'';}
+const data={title:document.getElementById('et-title').value.trim()||editingTrack.title,artist:document.getElementById('et-artist').value.trim()||'Unknown Artist',album:document.getElementById('et-album').value.trim()||'',cover:coverVal,resetCover:resetCover,autoCover:autoChecked,url:(document.getElementById('et-url')?document.getElementById('et-url').value.trim():'')};
 try{
 const r=await fetch('/api/update-track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:editingTrack.type,id:editingTrack.type==='url'?editingTrack.id:(editingTrack.type==='shared'?editingTrack.file:editingTrack.filename),owner:myNickname,data:data})});
 const d=await r.json();
