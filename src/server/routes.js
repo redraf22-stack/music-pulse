@@ -273,7 +273,7 @@ app.post('/api/update-track', require('express').json(), async (req, res) => {
     if (!type || !id || !owner || !data) return res.status(400).json({ error: 'Нет данных' });
     if (type === 'url') {
         const ut = require('./urltracks.js');
-        const upd = { id, title: data.title, artist: data.artist, album: data.album, cover: data.cover };
+        const upd = { id, title: data.title, artist: data.artist, album: data.album, cover: data.cover, autoCover: !!data.autoCover };
         if (data.url) upd.url = data.url;
         const updated = ut.update(owner, upd);
         if (!updated) return res.status(404).json({ error: 'Трек не найден' });
@@ -285,7 +285,17 @@ app.post('/api/update-track', require('express').json(), async (req, res) => {
         if (data.title) ovr.title = data.title;
         if (data.artist) ovr.artist = data.artist;
         if (data.album) ovr.album = data.album;
-        if (data.cover !== undefined) ovr.cover = data.cover;
+        if (data.cover !== undefined) {
+            const prev = PL.loadOverrides()[id] || {};
+            if (data.cover === '') {
+                if (prev.cover) ovr.prevCover = prev.cover;
+                else if (prev.prevCover) ovr.prevCover = prev.prevCover;
+                else { try { const emb = await PL.embeddedCover(id); if (emb) ovr.prevCover = emb; } catch (e) {} }
+                ovr.cover = '';
+            } else {
+                ovr.cover = data.cover;
+            }
+        }
         PL.setOverride(id, ovr);
     } else return res.status(400).json({ error: 'Неизвестный тип' });
     res.json({ success: true });
@@ -304,14 +314,14 @@ app.get('/api/my-tracks', async (req, res) => {
                 const o = ovr[t.filename] || {};
                 let cover = '';
                 try { cover = await PL.resolveLocalCover(t); } catch (e) { cover = t.cover || ''; }
-                return { type: 'local', filename: t.filename, title: o.title || t.title, artist: o.artist || t.artist, album: o.album || t.album || '', cover, duration: Math.floor(t.duration || 0) };
+                return { type: 'local', filename: t.filename, title: o.title || t.title, artist: o.artist || t.artist, album: o.album || t.album || '', cover, duration: Math.floor(t.duration || 0), autoCover: ('cover' in o) && !o.cover, prevCover: o.prevCover || '' };
             }));
         }
         const urls = [];
         for (const t of require('./urltracks.js').listFor(owner)) {
             let cover = t.cover || '';
             if (!cover && t.autoCover) { try { cover = await utils.findCover(t.title, t.artist); } catch (e) {} }
-                        urls.push({ type: 'url', id: t.id, title: t.title, artist: t.artist, album: t.album || '', cover, url: t.url || '', duration: 0 });
+                        urls.push({ type: 'url', id: t.id, title: t.title, artist: t.artist, album: t.album || '', cover, url: t.url || '', duration: 0, autoCover: !!t.autoCover, prevCover: '' });
         }
                 const shared = [];
         const roomCode = (req.query.room || '').toUpperCase();
@@ -319,7 +329,7 @@ app.get('/api/my-tracks', async (req, res) => {
         if (room && room.sharedMusic && room.sharedMusic[owner]) {
             room.sharedMusic[owner].tracks.forEach(t => {
                 const o = ovr['shared|' + owner + '|' + t.file] || {};
-                shared.push({ type: 'shared', file: t.file, title: o.title || t.title, artist: o.artist || t.artist, album: '', cover: o.cover || t.cover || '', duration: 0 });
+                shared.push({ type: 'shared', file: t.file, title: o.title || t.title, artist: o.artist || t.artist, album: '', cover: o.cover || t.cover || '', duration: 0, autoCover: !(('cover' in o ? o.cover : '') || t.cover || ''), prevCover: '' });
             });
         }
         res.json({ data: [...local, ...urls, ...shared] });

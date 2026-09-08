@@ -224,7 +224,7 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             const owner = t.owner || '?';
             if (!map.has(owner)) map.set(owner, { owner, local: [], urls: [] });
             const g = map.get(owner);
-            const item = { title: t.title, artist: (t.artist && t.artist.name) || t.artist || '' };
+            const item = { title: (t.title || '').trim() || 'Без названия', artist: ((t.artist && t.artist.name) || t.artist || '').trim() || 'Unknown Artist' };
             if (t.isUrl) g.urls.push(item); else g.local.push(item);
         });
         cb([...map.values()]);

@@ -130,28 +130,32 @@ showToast('📺 Трансляция экрана включена');
 }
 }
 socket.on('user-video-state',({userId,peerId,userName,enabled,tabId,isAdmin,isMod,isVip})=>{
-if(userId===mySocketId&&tabId===TAB_ID)return;
-const uniqueKey=peerId+'_'+(tabId||'unknown');
-if(enabled){
-allUsersWithVideo[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
-if(peer&&!videoCalls[peerId]){const call=peer.call(peerId,myVideoStream||new MediaStream(),{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}
-}else{
-delete allUsersWithVideo[uniqueKey];
-if(videoCalls[peerId]){try{videoCalls[peerId].close();}catch(e){}delete videoCalls[peerId];delete videoStreams[peerId];const uk=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===peerId);if(uk){delete videoUserInfo[uk];if(videoWindows[uk])closeVideoWindow(uk);}}
-}
-updateMediaUsersList();
+    if(userId===mySocketId&&tabId===TAB_ID)return;
+    const uniqueKey=peerId+'_'+(tabId||'unknown');
+    if(enabled){
+        allUsersWithVideo[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
+        if(peer&&!videoCalls[peerId]){const call=peer.call(peerId,myVideoStream||new MediaStream(),{metadata:{type:'video',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleVideoCall(call);}
+    }else{
+        delete allUsersWithVideo[uniqueKey];
+        delete videoUserInfo[uniqueKey];
+        if(videoCalls[peerId]){try{videoCalls[peerId].close();}catch(e){}delete videoCalls[peerId];delete videoStreams[peerId];}
+        if(videoWindows[uniqueKey])closeVideoWindow(uniqueKey);
+    }
+    updateMediaUsersList();
 });
 socket.on('user-screen-state',({userId,peerId,userName,enabled,tabId,isAdmin,isMod,isVip})=>{
-if(userId===mySocketId&&tabId===TAB_ID)return;
-const uniqueKey=peerId+'_'+(tabId||'unknown');
-if(enabled){
-allUsersWithScreen[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
-if(peer&&!screenCalls[peerId]){const call=peer.call(peerId,myScreenStream||new MediaStream(),{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}
-}else{
-delete allUsersWithScreen[uniqueKey];
-if(screenCalls[peerId]){try{screenCalls[peerId].close();}catch(e){}delete screenCalls[peerId];delete screenStreams[peerId];const uk=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uk){delete screenUserInfo[uk];if(screenWindows[uk])closeScreenWindow(uk);}}
-}
-updateMediaUsersList();
+    if(userId===mySocketId&&tabId===TAB_ID)return;
+    const uniqueKey=peerId+'_'+(tabId||'unknown');
+    if(enabled){
+        allUsersWithScreen[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
+        if(peer&&!screenCalls[peerId]){const call=peer.call(peerId,myScreenStream||new MediaStream(),{metadata:{type:'screen',userId:mySocketId,userName:myNickname,isAdmin:myRole==='admin',isMod:isMod,isVip:isVip,tabId:TAB_ID}});handleScreenCall(call);}
+    }else{
+        delete allUsersWithScreen[uniqueKey];
+        delete screenUserInfo[uniqueKey];
+        if(screenCalls[peerId]){try{screenCalls[peerId].close();}catch(e){}delete screenCalls[peerId];delete screenStreams[peerId];}
+        if(screenWindows[uniqueKey])closeScreenWindow(uniqueKey);
+    }
+    updateMediaUsersList();
 });
 socket.on('active-streams',streams=>{
 streams.forEach(stream=>{

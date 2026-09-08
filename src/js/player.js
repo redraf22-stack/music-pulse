@@ -267,13 +267,15 @@ document.getElementById('et-fields').innerHTML=`
 <button style="position:absolute;bottom:-8px;right:-8px;width:28px;height:28px;border-radius:50%;border:none;background:var(--accent);color:black;cursor:pointer;font-size:13px;" onclick="document.getElementById('et-cover-input').click()" title="Выбрать фото">📷</button>
 <input type="file" id="et-cover-input" accept="image/*" style="display:none;" onchange="pickEtCover(event)">
 </div>
-<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);cursor:pointer;"><input type="checkbox" id="et-auto-cover"> Авто-обложка (по названию)</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);cursor:pointer;"><input type="checkbox" id="et-auto-cover"${t.autoCover?' checked':''}> Авто-обложка (по названию)</label>
 </div>
 <div class="url-field"><label>Название *</label><input type="text" id="et-title" value="${escapeHtml(t.title||'')}"></div>
 <div class="url-field"><label>Исполнитель</label><input type="text" id="et-artist" value="${escapeHtml(artistName)}"></div>
 <div class="url-field"><label>Альбом</label><input type="text" id="et-album" value="${escapeHtml(t.album||'')}"></div>
 ${t.type==='url'?`<div class="url-field"><label>Ссылка на трек</label><input type="text" id="et-url" value="${escapeHtml(t.url||'')}"></div>`:''}`;
 document.getElementById('edit-track-modal').classList.add('open');
+const ac=document.getElementById('et-auto-cover');
+if(ac)ac.onchange=function(){const pv=document.getElementById('et-cover-preview');if(!pv||!editingTrack)return;if(this.checked){pv.src=editingTrack.cover||'';}else if(!editingTrack._newCover){pv.src=editingTrack.prevCover||editingTrack.cover||'';}};
 }
 function closeEditTrack(){document.getElementById('edit-track-modal').classList.remove('open');editingTrack=null;}
 async function pickEtCover(e){
@@ -284,7 +286,8 @@ e.target.value='';
 }
 async function saveEditTrack(){
 if(!editingTrack)return;
-const data={title:document.getElementById('et-title').value.trim()||editingTrack.title,artist:document.getElementById('et-artist').value.trim()||'Unknown Artist',album:document.getElementById('et-album').value.trim()||'',cover:document.getElementById('et-auto-cover').checked?'':(editingTrack._newCover||editingTrack.cover||''),url:(document.getElementById('et-url')?document.getElementById('et-url').value.trim():'')};
+const autoChecked=document.getElementById('et-auto-cover').checked;
+const data={title:document.getElementById('et-title').value.trim()||editingTrack.title,artist:document.getElementById('et-artist').value.trim()||'Unknown Artist',album:document.getElementById('et-album').value.trim()||'',cover:autoChecked?'':(editingTrack._newCover||editingTrack.prevCover||editingTrack.cover||''),autoCover:autoChecked,url:(document.getElementById('et-url')?document.getElementById('et-url').value.trim():'')};
 try{
 const r=await fetch('/api/update-track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:editingTrack.type,id:editingTrack.type==='url'?editingTrack.id:(editingTrack.type==='shared'?editingTrack.file:editingTrack.filename),owner:myNickname,data:data})});
 const d=await r.json();

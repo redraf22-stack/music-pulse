@@ -272,5 +272,12 @@ if(g.urls.length){const s=document.createElement('div');s.className='pl-col-titl
 document.getElementById('playlist-view-modal').classList.add('open');
 });
 }
-function mkPlViewRow(t,pre){const row=document.createElement('div');row.className='pl-user-row';const nm=document.createElement('span');nm.style.flex='1';const a=(t.artist&&t.artist.name)||t.artist||'';nm.textContent=pre+(t.title||'')+(a?' — '+a:'');return row;}
+function mkPlViewRow(t,pre){
+    const row=document.createElement('div');row.className='pl-user-row';
+    const nm=document.createElement('span');nm.style.flex='1';
+    const title=(t.title||'').trim()||'Без названия';
+    const a=((t.artist&&t.artist.name)||t.artist||'').trim();
+    nm.textContent=pre+title+(a?' — '+a:'');
+    return row;
+}
 function closePlaylistView(){document.getElementById('playlist-view-modal').classList.remove('open');}
