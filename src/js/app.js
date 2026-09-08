@@ -170,9 +170,10 @@ const ip=await window.electronAPI.getLanIp();
 const r=await fetch('http://localhost:'+s.port+'/list.json');
 const list=await r.json();
 socket.emit('share-music',{base:'http://'+ip+':'+s.port,tracks:list});
+window.iSharedMusic=true;
 showToast('📤 Музыка в комнате: '+list.length+' треков');
 }else showToast('📤 Не удалось поднять сервер музыки',true);
-}catch(e){showToast('📤 Ошибка шаринга: '+e.message,true);}
+}catch(e){showToast('📤 Ошибка загрузки: '+e.message,true);}
 });
 });
 socket.on('shared-music-update',d=>{if(document.getElementById('playlist-modal').classList.contains('open')&&plCurrentNick===d.nick){loadPlTracks(d.nick);}});
@@ -278,6 +279,7 @@ function mkPlViewRow(t,pre){
     const title=(t.title||'').trim()||'Без названия';
     const a=((t.artist&&t.artist.name)||t.artist||'').trim();
     nm.textContent=pre+title+(a?' — '+a:'');
+    row.appendChild(nm);
     return row;
 }
 function closePlaylistView(){document.getElementById('playlist-view-modal').classList.remove('open');}

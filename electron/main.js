@@ -150,13 +150,33 @@ ipcMain.handle('start-music-share', async () => {
             const protoS = localServer && localServer.isHttps ? 'https' : 'http';
             const list = [];
             for (const f of files) {
-                let title = null, artist = null;
-                try { const m = await mm.parseFile(path.join(dir, f)); title = m.common.title || null; artist = m.common.artist || null; } catch (e) {}
+                let title = null, artist = null, meta = null;
+                try { meta = await mm.parseFile(path.join(dir, f)); title = meta.common.title || null; artist = meta.common.artist || null; } catch (e) {}
                 const b = path.parse(f).name;
                 if (!title) { if (b.includes('-')) { const p = b.split('-'); artist = artist || p[0].trim(); title = p.slice(1).join('-').trim(); } else title = b; }
                 const it = { file: f, title, artist: artist || 'Unknown Artist' };
                 const o = ovr[f];
-                if (o) { if (o.title) it.title = o.title; if (o.artist) it.artist = o.artist; if (o.cover) it.cover = o.cover.startsWith('http') ? o.cover : (protoS + '://' + lanIp + ':3001' + o.cover); }
+                if (o) { if (o.title) it.title = o.title; if (o.artist) it.artist = o.artist; }
+                let coverRel = (o && ('cover' in o)) ? o.cover : null;
+                if (coverRel === null) {
+                    try {
+                        let embCache = {}; try { embCache = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'embedded-covers.json'), 'utf8')); } catch (e) {}
+                        if (f in embCache) coverRel = embCache[f];
+                        else {
+                            const pic = meta && meta.common.picture && meta.common.picture[0];
+                            const cdir = path.join(app.getPath('userData'), 'covers');
+                            if (!fs.existsSync(cdir)) fs.mkdirSync(cdir, { recursive: true });
+                            if (pic) {
+                                const cname = 'emb-' + Date.now() + '-' + Math.round(Math.random() * 1e9) + (pic.format === 'image/png' ? '.png' : '.jpg');
+                                fs.writeFileSync(path.join(cdir, cname), Buffer.from(pic.data));
+                                coverRel = '/covers/' + cname;
+                            } else coverRel = '';
+                            embCache[f] = coverRel;
+                            fs.writeFileSync(path.join(app.getPath('userData'), 'embedded-covers.json'), JSON.stringify(embCache));
+                        }
+                    } catch (e) {}
+                }
+                if (coverRel) it.cover = coverRel.startsWith('http') ? coverRel : (protoS + '://' + lanIp + ':3001' + coverRel);
                 list.push(it);
             }
             return list;

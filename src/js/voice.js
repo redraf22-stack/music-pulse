@@ -193,7 +193,7 @@ const videoBtn=document.createElement('button');
 videoBtn.className='media-show-btn video'+(videoWindows[uniqueKey]?' active':'');
 videoBtn.textContent=videoWindows[uniqueKey]?'✓ Видео':'📹 Видео';
 videoBtn.title=videoWindows[uniqueKey]?'Закрыть видео':'Смотреть видео';
-videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{if(!videoStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');setTimeout(()=>{if(videoStreams[u.peerId])openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
+videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);if(!videoStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');}}updateMediaUsersList();};
 buttonsDiv.appendChild(videoBtn);
 }
 if(u.hasScreen){
