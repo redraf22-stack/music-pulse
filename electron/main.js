@@ -192,14 +192,14 @@ ipcMain.handle('get-lan-ip', () => {
     return '127.0.0.1';
 });
 const MUSIC_SETTINGS = path.join(app.getPath('userData'), 'settings.json');
-function readMusicSettings() { try { return JSON.parse(fsMain.readFileSync(MUSIC_SETTINGS, 'utf8')); } catch (e) { return {}; } }
+function readMusicSettings() { try { return JSON.parse(fs.readFileSync(MUSIC_SETTINGS, 'utf8')); } catch (e) { return {}; } }
 function readMusicDir() { return readMusicSettings().musicDir || ''; }
 ipcMain.handle('get-music-dir', () => readMusicDir());
 ipcMain.handle('set-music-dir', (event, dir) => {
     try {
         const s = readMusicSettings();
         s.musicDir = dir;
-        fsMain.writeFileSync(MUSIC_SETTINGS, JSON.stringify(s, null, 2));
+        fs.writeFileSync(MUSIC_SETTINGS, JSON.stringify(s, null, 2));
         return { success: true };
     } catch (e) { return { success: false }; }
 });

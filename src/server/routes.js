@@ -60,11 +60,11 @@ module.exports = function (app, utils) {
             // Берём треки из АКТИВНОГО плейлиста
             const plTracks = await require('./playlists.js').resolveTracks(room, true);
             combined = plTracks.map(t => ({
-                ...t,
-                normalizedTitle: utils.normalizeStr(t.title),
-                normalizedArtist: utils.normalizeStr(t.artist),
-                normalizedAlbum: ''
-            }));
+            ...t,
+            normalizedTitle: utils.normalizeStr(t.title),
+            normalizedArtist: utils.normalizeStr((t.artist && t.artist.name) || t.artist || ''),
+            normalizedAlbum: ''
+        }));
         } else {
             // Вне комнаты — все скачанные + URL
             const all = await utils.getLocalTracks();
@@ -108,7 +108,7 @@ module.exports = function (app, utils) {
             try {
                 const plTracks = await require('./playlists.js').resolveTracks(room, false);
                 fixed = plTracks
-                    .filter(t => !t.isUrl && ((utils.normalizeStr(t.title) || '').includes(nq) || (utils.normalizeStr(t.artist) || '').includes(nq)))
+                    .filter(t => !t.isUrl && ((utils.normalizeStr(t.title) || '').includes(nq) || (utils.normalizeStr((t.artist && t.artist.name) || t.artist || '') || '').includes(nq)))
                     .map(t => utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, duration: Math.floor(t.duration || 30), cover: t.cover || '', preview: '/local-file?p=' + encodeURIComponent(t.filename), isLocal: true, isUrl: false }));
             } catch (e) { console.error('[search] playlist fail:', e.message); }
         }
