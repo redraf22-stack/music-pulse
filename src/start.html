@@ -18,6 +18,10 @@
 <div class="modal-field"><label data-i18n="settings_speaker">Динамики (вывод)</label><select class="modal-select" id="speaker-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
 <div class="modal-field"><label data-i18n="camera_label">📷 Камера (видео)</label><select class="modal-select" id="camera-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
 <div class="modal-field"><label>📁 Папка с музыкой</label><div style="display:flex;gap:8px;align-items:center;"><input type="text" id="music-dir-input" readonly style="margin-bottom:0;flex:1;" placeholder="По умолчанию"><button class="btn-small" onclick="pickMusicDir()" style="flex-shrink:0;">Выбрать</button></div><div style="font-size:11px;color:var(--sub);margin-top:4px;">Где хранятся твои MP3/WAV/OGG файлы</div></div>
+<div class="modal-field"><label>Запуск при включении компьютера</label><div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autostart-check"><span style="font-size:12px;color:var(--sub);">Запускать приложение вместе с Windows (по умолчанию выкл)</span></div></div>
+<div style="margin-top:16px;display:flex;justify-content:flex-end;">
+<button class="primary" onclick="closeSettings()" style="padding:10px 22px;">✓ Готово</button>
+</div>
 </div>
 </div>
 
@@ -53,5 +57,6 @@
 <script src="js/helpers.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/start.js"></script>
+<script src="js/guide.js"></script>
 </body>
 </html>

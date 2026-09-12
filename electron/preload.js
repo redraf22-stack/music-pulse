@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
+    getDeviceSettings: () => ipcRenderer.invoke('get-device-settings'),
+    setDeviceSettings: (d) => ipcRenderer.invoke('set-device-settings', d),
+    getAutostart: () => ipcRenderer.invoke('get-autostart'),
+    setAutostart: (en) => ipcRenderer.invoke('set-autostart', en),
     goStart: (lang) => ipcRenderer.invoke('go-start', lang),
     startServerAndCreate: (nick, lang) => ipcRenderer.invoke('start-server-and-create', nick, lang),
     connectToServer: (info) => ipcRenderer.invoke('connect-to-server', info),

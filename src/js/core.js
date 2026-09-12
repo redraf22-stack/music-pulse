@@ -23,3 +23,11 @@ let speakingUsers=new Set(),audioContext=null,analysers={},gains={},myAnalyser=n
 let socketToPeer={},peerToSocket={};
 let lastUsersList=null,manageMode=false;
 function getGlobalAudioContext(){if(!audioContext){try{audioContext=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}if(audioContext&&audioContext.state==='suspended')audioContext.resume().catch(()=>{});return audioContext;}
+// Применяем настройки устройств после создания audio
+setTimeout(()=>{
+if(typeof applySpeakerToDevice==='function'){
+applySpeakerToDevice().then(r=>{
+if(r&&r.ok&&!r.silent)console.log('[speaker] applied in core',r);
+}).catch(()=>{});
+}
+},100);

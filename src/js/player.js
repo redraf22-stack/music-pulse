@@ -63,6 +63,7 @@ const urlChanged=ns&&audio.src!==ns;
 if(ns&&(urlChanged||identityChanged)){
 trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';
 audio.pause();audio.src=ns;audio.load();
+if(typeof applySpeakerToDevice==='function')applySpeakerToDevice().catch(()=>{});
 const onReady=()=>{if(audio.readyState<2){setTimeout(onReady,100);return;}let pos=state.currentTime||0;if(state.playing&&state.startedAt){pos=(Date.now()+serverTimeOffset-state.startedAt)/1000;}if(audio.duration&&pos>0){try{audio.currentTime=Math.min(pos,Math.max(0,audio.duration-0.1));}catch(e){}}if(state.playing&&isReady){audio.play().then(()=>{if(myRole==='admin'||isMod)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});}).catch(()=>{});}else{audio.pause();}trackChanging=false;lastSyncTime=Date.now();trackLoadedAt=Date.now();audio.removeEventListener('canplay',onReady);audio.removeEventListener('loadedmetadata',onReady);};
 audio.addEventListener('canplay',onReady,{once:true});
 audio.addEventListener('loadedmetadata',onReady,{once:true});

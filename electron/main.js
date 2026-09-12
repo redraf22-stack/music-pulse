@@ -232,6 +232,36 @@ ipcMain.handle('set-music-dir', (event, dir) => {
         return { success: true };
     } catch (e) { return { success: false }; }
 });
+ipcMain.handle('get-device-settings', () => {
+    const s = readMusicSettings();
+    return {
+        mic: s.mic || '', speaker: s.speaker || '', camera: s.camera || '',
+        micLabel: s.micLabel || '', speakerLabel: s.speakerLabel || '', cameraLabel: s.cameraLabel || '',
+        micGroup: s.micGroup || '', speakerGroup: s.speakerGroup || '', cameraGroup: s.cameraGroup || ''
+    };
+});
+ipcMain.handle('set-device-settings', (event, d) => {
+    try {
+        const s = readMusicSettings();
+        if (d.mic !== undefined) s.mic = d.mic;
+        if (d.speaker !== undefined) s.speaker = d.speaker;
+        if (d.camera !== undefined) s.camera = d.camera;
+        if (d.micLabel !== undefined) s.micLabel = d.micLabel;
+        if (d.speakerLabel !== undefined) s.speakerLabel = d.speakerLabel;
+        if (d.cameraLabel !== undefined) s.cameraLabel = d.cameraLabel;
+        if (d.micGroup !== undefined) s.micGroup = d.micGroup;
+        if (d.speakerGroup !== undefined) s.speakerGroup = d.speakerGroup;
+        if (d.cameraGroup !== undefined) s.cameraGroup = d.cameraGroup;
+        fs.writeFileSync(MUSIC_SETTINGS, JSON.stringify(s, null, 2));
+        return { success: true };
+    } catch (e) { return { success: false }; }
+});
+ipcMain.handle('get-autostart', () => {
+    try { return { enabled: !!app.getLoginItemSettings().openAtLogin }; } catch (e) { return { enabled: false }; }
+});
+ipcMain.handle('set-autostart', (event, en) => {
+    try { app.setLoginItemSettings({ openAtLogin: !!en }); return { success: true }; } catch (e) { return { success: false }; }
+});
 ipcMain.handle('go-start', async (event, lang) => {
     await mainWindow.loadFile(path.join(__dirname, '../src/start.html'), lang ? { query: { lang: String(lang) } } : {});
     return { success: true };

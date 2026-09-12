@@ -13,6 +13,9 @@ document.querySelectorAll('[data-i18n-ph]').forEach(function(el){el.placeholder=
 const lr=document.getElementById('lang-ru'),le=document.getElementById('lang-en');
 if(lr)lr.classList.toggle('active',currentLang==='ru');
 if(le)le.classList.toggle('active',currentLang==='en');
+const rlr=document.getElementById('room-lang-ru'),rle=document.getElementById('room-lang-en');
+if(rlr)rlr.classList.toggle('active',currentLang==='ru');
+if(rle)rle.classList.toggle('active',currentLang==='en');
 if(typeof updateVoiceToggleButton==='function')updateVoiceToggleButton();
 if(typeof updateVoiceEntryButton==='function')updateVoiceEntryButton();
 if(typeof updateRandomButtonVisibility==='function')updateRandomButtonVisibility();
@@ -135,6 +138,11 @@ const AUTO_EXTRA={
 'Выбрать фото':'Choose photo',
 'Оконный режим':'Windowed mode',
 '📝 Моя музыка':'📝 My Music',
+'Запуск при включении компьютера':'Launch at system startup',
+'Запускать приложение вместе с Windows (по умолчанию выкл)':'Start the app with Windows (off by default)',
+'✓ Применить':'✓ Apply',
+'⚙️ Настройки устройств':'⚙️ Device settings',
+'Настройки устройств':'Device settings',
 };
 const PREFIX_RULES=[['Треки: ','Tracks: '],['📤 Запрос отправлен: ','📤 Request sent: '],['📤 Музыка в комнате: ','📤 Music in room: '],['📤 Ошибка загрузки: ','📤 Share error: '],['Не удалось включить камеру: ','Failed to enable camera: '],['Не удалось начать трансляцию: ','Failed to start sharing: '],['Плейлист «','Playlist "'],['Ничего не найдено по «','Nothing found for "'],['Подождите ','Wait ']];
 const SUFFIX_RULES=[[' треков',' tracks'],[' трека',' tracks'],[' сек.',' sec.'],[' сек',' sec'],['» будет удалён.','" will be deleted.'],['» 😔','" 😔']];

@@ -23,3 +23,15 @@ render(q){const self=this;if(!this.items.length){this.close();return;}this.list.
 close(){this.wrapper.classList.remove('open');this.selectedIndex=-1;this.isOpen=false;}
 onKeydown(e){if(!this.isOpen)return;if(e.key==='ArrowDown'){e.preventDefault();this.selectedIndex=Math.min(this.selectedIndex+1,this.items.length-1);this.updateSelection();}else if(e.key==='ArrowUp'){e.preventDefault();this.selectedIndex=Math.max(this.selectedIndex-1,0);this.updateSelection();}else if(e.key==='Escape'){this.close();}}
 updateSelection(){const self=this;const i=this.list.querySelectorAll('.ac-item');i.forEach(function(e,x){e.classList.toggle('selected',x===self.selectedIndex);if(x===self.selectedIndex)e.scrollIntoView({block:'nearest'});});}}
+async function resolveDeviceId(kind,savedId){
+if(!savedId)return savedId;
+try{
+const list=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind===kind);
+if(list.find(x=>x.deviceId===savedId))return savedId;
+const key=kind==='audioinput'?'syncmusic_mic_label':'syncmusic_camera_label';
+const label=localStorage.getItem(key)||'';
+if(label){const d=list.find(x=>x.label===label);if(d)return d.deviceId;}
+if(list.length&&list.every(d=>!d.label)){const ts=await navigator.mediaDevices.getUserMedia(kind==='audioinput'?{audio:true}:{video:true});ts.getTracks().forEach(t=>t.stop());const list2=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind===kind);const d2=list2.find(x=>x.label===label);if(d2)return d2.deviceId;}
+}catch(e){}
+return savedId;
+}

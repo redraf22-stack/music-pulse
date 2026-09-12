@@ -47,6 +47,7 @@ isReady=true;restorePlayerBar();
 }
 else{document.getElementById('admin-controls').style.display='none';if(window.electronAPI){isReady=true;restorePlayerBar();}else{showReadyButton();}startCooldownTimer();}
 updateVoiceEntryButton();updateManageBtnVisibility();updateRegenBtnVisibility();updateRandomButtonVisibility();
+if(typeof applySpeakerToDevice==='function'){applySpeakerToDevice().then(r=>{if(r&&r.ok&&!r.silent)console.log('[speaker] applied on enter',r);}).catch(()=>{});}
 socket.emit('get-active-streams');
 socket.emit('get-playlists');
 renderPlaylistBar();
@@ -98,8 +99,7 @@ const icon=u.isAdmin?'👑 ':u.isMod?'🛡️ ':u.isVip?'⭐ ':'';
 const displayName=u.id===mySocketId?u.name+' (Вы)':u.name;
 let actionsHTML='';if(manageMode&&myRole==='admin'&&!u.isAdmin){actionsHTML+=`<button class="role-btn ${u.isVip?'active-vip':''}" onclick="toggleRole('${escapeHtml(u.id)}','vip')">VIP</button><button class="role-btn ${u.isMod?'active-mod':''}" onclick="toggleRole('${escapeHtml(u.id)}','mod')">MOD</button><button class="kick-btn" onclick="kickUser('${escapeHtml(u.id)}')" title="Кикнуть">❌</button><button class="ban-btn" onclick="banUser('${escapeHtml(u.id)}')" title="Забанить">🚫</button>`;}
 let vdHTML='',voiceBtns='';
-if(u.voiceState&&u.voiceState.inVoice===true)voiceUsers.add(u.id);
-if(u.voiceState&&u.voiceState.inVoice===false)voiceUsers.delete(u.id);
+if(u.voiceState&&u.voiceState.inVoice===true)voiceUsers.add(u.id);else voiceUsers.delete(u.id);
 const hasVoice=voiceUsers.has(u.id)||(u.id===mySocketId&&isInVoice)||(!!u.voiceState&&u.voiceState.inVoice===true);
 const hasVideo=!!(u.videoEnabled)||(!!u.voiceState&&!!u.voiceState.videoEnabled);
 const hasScreen=!!(u.screenEnabled)||(!!u.voiceState&&!!u.voiceState.screenEnabled);
@@ -283,3 +283,51 @@ function mkPlViewRow(t,pre){
     return row;
 }
 function closePlaylistView(){document.getElementById('playlist-view-modal').classList.remove('open');}
+// ===== НАСТРОЙКИ УСТРОЙСТВ В КОМНАТЕ =====
+async function openRoomDeviceSettings(){
+const m=document.getElementById('room-device-modal');if(!m)return;
+m.style.display='flex';
+await loadDeviceSettings();
+try{
+const ts=await navigator.mediaDevices.getUserMedia({audio:true,video:true}).catch(()=>navigator.mediaDevices.getUserMedia({audio:true}));
+ts.getTracks().forEach(t=>t.stop());
+const devs=await navigator.mediaDevices.enumerateDevices();
+const mic=document.getElementById('room-mic-select');
+const sp=document.getElementById('room-speaker-select');
+const cam=document.getElementById('room-camera-select');
+mic.innerHTML='<option value="">'+escapeHtml(translate('settings_default'))+'</option>';
+sp.innerHTML='<option value="">'+escapeHtml(translate('settings_default'))+'</option>';
+cam.innerHTML='<option value="">'+escapeHtml(translate('settings_default'))+'</option>';
+devs.forEach(d=>{
+const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||(d.kind+' ('+d.deviceId.slice(0,8)+'...)');
+if(d.kind==='audioinput')mic.appendChild(o);
+if(d.kind==='audiooutput')sp.appendChild(o);
+if(d.kind==='videoinput')cam.appendChild(o);
+});
+resolveSelectValue(mic,selectedMicId,'audioinput');resolveSelectValue(sp,selectedSpeakerId,'audiooutput');resolveSelectValue(cam,selectedCameraId,'videoinput');
+}catch(e){console.error('[room-devices]',e);}
+}
+
+function closeRoomDeviceSettings(){const m=document.getElementById('room-device-modal');if(m)m.style.display='none';}
+
+async function saveRoomDeviceSettings(){
+const mic=document.getElementById('room-mic-select').value;
+const sp=document.getElementById('room-speaker-select').value;
+const cam=document.getElementById('room-camera-select').value;
+selectedMicId=mic;selectedSpeakerId=sp;selectedCameraId=cam;
+const devs=await navigator.mediaDevices.enumerateDevices();
+const pick=(id,kind)=>{const d=devs.find(x=>x.deviceId===id&&x.kind===kind);return d?{label:d.label,groupId:d.groupId}:null;};
+const spInfo=pick(sp,'audiooutput');
+const miInfo=pick(mic,'audioinput');
+const caInfo=pick(cam,'videoinput');
+const payload={mic,speaker:sp,camera:cam};
+if(spInfo){payload.speakerLabel=spInfo.label;payload.speakerGroup=spInfo.groupId;}
+if(miInfo){payload.micLabel=miInfo.label;payload.micGroup=miInfo.groupId;}
+if(caInfo){payload.cameraLabel=caInfo.label;payload.cameraGroup=caInfo.groupId;}
+if(window.electronAPI&&window.electronAPI.setDeviceSettings)await window.electronAPI.setDeviceSettings(payload);
+applySpeakerToDevice().then(r=>{
+if(r&&r.ok&&!r.silent){showToast('🔊 Вывод звука переключен');}
+else{showToast('💾 Сохранено');}
+});
+closeRoomDeviceSettings();
+}
