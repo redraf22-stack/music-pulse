@@ -129,8 +129,9 @@ ipcMain.handle('create-floating-window', async (event, { type, peerId, userName,
         title: `${type === 'video' ? '📹' : '📺'} ${userName}`
     });
     
-    const proto = localServer && localServer.isHttps ? 'https' : 'http';
-    const url = `${proto}://localhost:3001/floating.html?type=${type}&peerId=${encodeURIComponent(peerId)}&userName=${encodeURIComponent(userName)}&isSelf=${isSelf}`;
+    let origin = 'http://localhost:3001';
+    try { origin = new URL(mainWindow.getURL()).origin; } catch (e) {}
+    const url = `${origin}/floating.html?type=${type}&peerId=${encodeURIComponent(peerId)}&userName=${encodeURIComponent(userName)}&isSelf=${isSelf}`;
     await floatingWindow.loadURL(url);
     
     floatingWindow.on('closed', () => {

@@ -40,10 +40,17 @@ try{
 const co={audio:selectedMicId?{deviceId:{exact:selectedMicId}}:true,video:false};
 myStream=await navigator.mediaDevices.getUserMedia(co);
 startSelfSpeakingDetection(myStream);
+if(!peer){
 peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});
-peer.on('open',pid=>{myPeerId=pid;isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;socket.emit('register-peer-id',pid);updateVoiceEntryButton();updateVoiceControlsInPlayer();socket.emit('join-voice');showToast(translate('connected'));});
 peer.on('call',handleIncomingCall);
 peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);leaveVoiceChat();});
+}
+if(!myPeerId){await new Promise(res=>{if(myPeerId)return res(myPeerId);peer.once('open',pid=>{myPeerId=pid;res(pid);});});}
+isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;
+socket.emit('register-peer-id',myPeerId);
+updateVoiceEntryButton();updateVoiceControlsInPlayer();
+socket.emit('join-voice');
+showToast(translate('connected'));
 }catch(e){let m=e.message;if(e.name==='NotAllowedError')m=translate('mic_denied');else if(e.name==='NotFoundError')m=translate('mic_not_found');else if(e.name==='SecurityError')m=translate('need_https');showToast(m,true);eb.disabled=false;updateVoiceEntryButton();}
 }
 function handleIncomingCall(call){
@@ -72,14 +79,14 @@ c.on('close',()=>{const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._
 function handleVideoCall(call){
 const peerId=call.peer;
 videoCalls[peerId]=call;
-if(call.metadata){const tabId=call.metadata.tabId||'unknown';const uniqueKey=peerId+'_'+tabId;videoUserInfo[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,peerId:peerId,tabId:tabId};allUsersWithVideo[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,peerId:peerId,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,tabId:tabId,isSelf:false};}
+if(call.metadata&&call.metadata.userId&&call.metadata.userId!==mySocketId){const tabId=call.metadata.tabId||'unknown';const uniqueKey=peerId+'_'+tabId;videoUserInfo[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,peerId:peerId,tabId:tabId};allUsersWithVideo[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,peerId:peerId,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,tabId:tabId,isSelf:false};}
 call.on('stream',stream=>{videoStreams[peerId]=stream;const uniqueKey=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===peerId);if(uniqueKey&&videoWindows[uniqueKey]){const video=videoWindows[uniqueKey].querySelector('video');if(video)video.srcObject=stream;}updateMediaUsersList();});
 call.on('close',()=>{delete videoCalls[peerId];delete videoStreams[peerId];const uniqueKey=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===peerId);if(uniqueKey){delete videoUserInfo[uniqueKey];delete allUsersWithVideo[uniqueKey];if(videoWindows[uniqueKey])closeVideoWindow(uniqueKey);}updateMediaUsersList();});
 }
 function handleScreenCall(call){
 const peerId=call.peer;
 screenCalls[peerId]=call;
-if(call.metadata){const tabId=call.metadata.tabId||'unknown';const uniqueKey=peerId+'_'+tabId;screenUserInfo[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,peerId:peerId,tabId:tabId};allUsersWithScreen[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,peerId:peerId,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,tabId:tabId,isSelf:false};}
+if(call.metadata&&call.metadata.userId&&call.metadata.userId!==mySocketId){const tabId=call.metadata.tabId||'unknown';const uniqueKey=peerId+'_'+tabId;screenUserInfo[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,peerId:peerId,tabId:tabId};allUsersWithScreen[uniqueKey]={userId:call.metadata.userId,userName:call.metadata.userName,peerId:peerId,isAdmin:call.metadata.isAdmin,isMod:call.metadata.isMod,isVip:call.metadata.isVip,tabId:tabId,isSelf:false};}
 call.on('stream',stream=>{screenStreams[peerId]=stream;const uniqueKey=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uniqueKey&&screenWindows[uniqueKey]){const video=screenWindows[uniqueKey].querySelector('video');if(video)video.srcObject=stream;}updateMediaUsersList();});
 call.on('close',()=>{delete screenCalls[peerId];delete screenStreams[peerId];const uniqueKey=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uniqueKey){delete screenUserInfo[uniqueKey];delete allUsersWithScreen[uniqueKey];if(screenWindows[uniqueKey])closeScreenWindow(uniqueKey);}updateMediaUsersList();});
 }
@@ -96,9 +103,7 @@ if(myVideoEnabled){
 myVideoEnabled=false;btn.classList.remove('active');btn.innerHTML='📷 Включить видеосвязь';
 if(myVideoStream){myVideoStream.getTracks().forEach(t=>{t.stop();});myVideoStream=null;}
 socket.emit('toggle-video',false,TAB_ID);
-const myUniqueKey=myPeerId+'_'+TAB_ID;
-delete allUsersWithVideo[myUniqueKey];
-if(videoWindows[myUniqueKey])closeVideoWindow(myUniqueKey);
+Object.keys(allUsersWithVideo).forEach(k=>{if(allUsersWithVideo[k].userId===mySocketId){delete allUsersWithVideo[k];delete videoUserInfo[k];if(videoWindows[k])closeVideoWindow(k);}});
 updateMediaUsersList();
 }else{
 try{
@@ -121,9 +126,7 @@ if(myScreenEnabled){
 myScreenEnabled=false;btn.classList.remove('active');btn.innerHTML='📺 Транслировать экран';
 if(myScreenStream){myScreenStream.getTracks().forEach(t=>{t.stop();});myScreenStream=null;}
 socket.emit('toggle-screen',false,TAB_ID);
-const myUniqueKey=myPeerId+'_'+TAB_ID;
-delete allUsersWithScreen[myUniqueKey];
-if(screenWindows[myUniqueKey])closeScreenWindow(myUniqueKey);
+Object.keys(allUsersWithScreen).forEach(k=>{if(allUsersWithScreen[k].userId===mySocketId){delete allUsersWithScreen[k];delete screenUserInfo[k];if(screenWindows[k])closeScreenWindow(k);}});
 updateMediaUsersList();
 }else{
 try{
@@ -150,6 +153,7 @@ socket.on('user-video-state',({userId,peerId,userName,enabled,tabId,isAdmin,isMo
     }else{
         delete allUsersWithVideo[uniqueKey];
         delete videoUserInfo[uniqueKey];
+        Object.keys(allUsersWithVideo).forEach(k=>{if(allUsersWithVideo[k].userId===userId){delete allUsersWithVideo[k];delete videoUserInfo[k];if(videoWindows[k])closeVideoWindow(k);}});
         if(videoCalls[peerId]){try{videoCalls[peerId].close();}catch(e){}delete videoCalls[peerId];delete videoStreams[peerId];}
         if(videoWindows[uniqueKey])closeVideoWindow(uniqueKey);
     }
@@ -164,6 +168,7 @@ socket.on('user-screen-state',({userId,peerId,userName,enabled,tabId,isAdmin,isM
     }else{
         delete allUsersWithScreen[uniqueKey];
         delete screenUserInfo[uniqueKey];
+        Object.keys(allUsersWithScreen).forEach(k=>{if(allUsersWithScreen[k].userId===userId){delete allUsersWithScreen[k];delete screenUserInfo[k];if(screenWindows[k])closeScreenWindow(k);}});
         if(screenCalls[peerId]){try{screenCalls[peerId].close();}catch(e){}delete screenCalls[peerId];delete screenStreams[peerId];}
         if(screenWindows[uniqueKey])closeScreenWindow(uniqueKey);
     }
@@ -225,7 +230,7 @@ const win=document.createElement('div');win.className='video-window';win.style.w
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📹 '+userName;
 const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId);
-const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
+const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn fs';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
 const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeVideoWindow(uniqueKey);
 header.appendChild(title);header.appendChild(separateBtn);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
 const video=document.createElement('video');video.autoplay=true;video.playsInline=true;if(isSelf)video.muted=true;
@@ -242,7 +247,7 @@ const win=document.createElement('div');win.className='video-window';win.style.w
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📺 '+userName;
 const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId);
-const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
+const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn fs';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
 const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeVideoWindow(uniqueKey);
 header.appendChild(title);header.appendChild(separateBtn);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
 const video=document.createElement('video');video.autoplay=true;video.playsInline=true;
@@ -258,14 +263,14 @@ function closeScreenWindow(uniqueKey){if(screenWindows[uniqueKey]){screenWindows
 function toggleVideoFullscreen(uniqueKey){
 const win=videoWindows[uniqueKey];if(!win)return;
 win.classList.toggle('fullscreen');
-const btn=win.querySelector('.video-window-btn:not(.close)');
+const btn=win.querySelector('.video-window-btn.fs');
 if(win.classList.contains('fullscreen')){btn.innerHTML='🗗';win.style.left='';win.style.top='';win.style.right='';win.style.bottom='';win.style.width='';win.style.height='';}
 else{btn.innerHTML='⛶';win.style.width='480px';win.style.height='360px';win.style.left='100px';win.style.top='100px';}
 }
 function toggleScreenFullscreen(uniqueKey){
 const win=screenWindows[uniqueKey];if(!win)return;
 win.classList.toggle('fullscreen');
-const btn=win.querySelector('.video-window-btn:not(.close)');
+const btn=win.querySelector('.video-window-btn.fs');
 if(win.classList.contains('fullscreen')){btn.innerHTML='🗗';win.style.left='';win.style.top='';win.style.right='';win.style.bottom='';win.style.width='';win.style.height='';}
 else{btn.innerHTML='⛶';win.style.width='640px';win.style.height='480px';win.style.left='150px';win.style.top='150px';}
 }
@@ -288,9 +293,10 @@ socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted
 function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(u.name,val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
 function onUserVolumeInput(sid,el,rng){let v=parseInt(el.value);if(isNaN(v)||v<0)v=0;if(v>200)v=200;el.value=v;const sv=v/200;if(rng)rng.value=sv;setLocalUserVolume(sid,sv);}
 function spinUserVolume(sid,delta,rng,inp){let v=parseInt(inp.value);if(isNaN(v))v=100;v+=delta;if(v<0)v=0;if(v>200)v=200;inp.value=v;onUserVolumeInput(sid,inp,rng);}
-socket.on('media-requested', async ({ requesterSocketId, type }) => {
+socket.on('media-requested', async ({ requesterSocketId, requesterPeerId, type }) => {
     if (!peer) return;
-    const targetPeerId = socketToPeer[requesterSocketId];
+    let targetPeerId = requesterPeerId || socketToPeer[requesterSocketId];
+    if (!targetPeerId) { const u = (lastUsersList || []).find(x => x.id === requesterSocketId); if (u) targetPeerId = u.peerId; }
     if (!targetPeerId) return;
     try {
         if (type === 'video' && myVideoStream && myVideoEnabled) {

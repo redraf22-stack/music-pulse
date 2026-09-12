@@ -8,7 +8,7 @@ module.exports = function (io, R, utils) {
         socket.on('ping-server', cb => { if (typeof cb === 'function') cb(); });
         socket.on('time-sync', (t0, cb) => { if (typeof cb === 'function') cb(Date.now()); });
         socket.on('heartbeat', () => { socket.lastActivity = Date.now(); socket.emit('heartbeat-ack'); });
-        socket.on('register-peer-id', p => { socket.peerId = p; });
+        socket.on('register-peer-id', p => { socket.peerId = p; if (socket.roomCode) R.broadcastUsers(socket.roomCode); });
         socket.on('create-room', (nickname, cb) => {
             const code = String(Math.floor(10000 + Math.random() * 90000));
             const name = nickname?.trim() || 'Аноним';
@@ -71,7 +71,9 @@ module.exports = function (io, R, utils) {
             if (!socket.roomCode) return;
             const room = rooms[socket.roomCode]; if (!room) return;
             const target = room.users.find(u => u.id === userId);
-            if (target) io.to(target.id).emit('media-requested', { requesterSocketId: socket.id, type });
+            if (!target) return;
+            const reqSock = io.sockets.sockets.get(socket.id);
+            io.to(target.id).emit('media-requested', { requesterSocketId: socket.id, requesterPeerId: reqSock ? reqSock.peerId : null, type });
         });
         socket.on('request-self-stream', ({ type }) => {
     if (!socket.roomCode) return;
