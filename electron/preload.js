@@ -1,9 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     createFloatingWindow: (o) => ipcRenderer.invoke('create-floating-window', o),
-    closeFloatingWindow: () => ipcRenderer.invoke('close-floating-window'),
-    minimizeFloatingWindow: () => ipcRenderer.invoke('minimize-floating-window'),
-    toggleMaximizeFloatingWindow: () => ipcRenderer.invoke('toggle-maximize-floating-window'),
+    closeFloatingWindow: (id) => ipcRenderer.invoke('close-floating-window', id),
+    minimizeFloatingWindow: (id) => ipcRenderer.invoke('minimize-floating-window', id),
+    toggleMaximizeFloatingWindow: (id) => ipcRenderer.invoke('toggle-maximize-floating-window', id),
     returnFloatingToMain: (d) => ipcRenderer.invoke('return-floating-to-main', d),
     onRestoreWindowInMain: (cb) => ipcRenderer.on('restore-window-in-main', (e, d) => cb(d)),
     getDeviceSettings: () => ipcRenderer.invoke('get-device-settings'),

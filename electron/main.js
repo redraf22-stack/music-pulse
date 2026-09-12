@@ -103,70 +103,40 @@ function createWindow() {
     mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-let floatingWindow = null;
+const floatingWindows = new Map();
+let floatingSeq = 0;
 
-ipcMain.handle('create-floating-window', async (event, { type, peerId, userName, isSelf }) => {
-    if (floatingWindow) {
-        floatingWindow.close();
-    }
-    floatingWindow = new BrowserWindow({
-        width: type === 'video' ? 480 : 640,
-        height: type === 'video' ? 360 : 480,
-        x: 100,
-        y: 100,
+ipcMain.handle('create-floating-window', async (event, opts) => {
+    const winId = 'fw' + (++floatingSeq);
+    const w = new BrowserWindow({
+        width: opts.type === 'video' ? 480 : 640,
+        height: opts.type === 'video' ? 360 : 480,
+        x: 100 + floatingWindows.size * 40,
+        y: 100 + floatingWindows.size * 40,
         alwaysOnTop: true,
-        skipTaskbar: false,
         frame: false,
-        transparent: false,
         resizable: true,
         minimizable: true,
         maximizable: true,
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false
-        },
-        title: `${type === 'video' ? '📹' : '📺'} ${userName}`
+        webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
     });
-    
     let origin = 'http://localhost:3001';
     try { origin = new URL(mainWindow.getURL()).origin; } catch (e) {}
-    const url = `${origin}/floating.html?type=${type}&peerId=${encodeURIComponent(peerId)}&userName=${encodeURIComponent(userName)}&isSelf=${isSelf}`;
-    await floatingWindow.loadURL(url);
-    
-    floatingWindow.on('closed', () => {
-        floatingWindow = null;
-    });
-    
-    return { success: true };
+    const q = new URLSearchParams({ winId: winId, type: opts.type || 'screen', peerId: opts.peerId || '', userName: opts.userName || '', isSelf: String(!!opts.isSelf) });
+    floatingWindows.set(winId, { win: w, meta: opts });
+    w.on('closed', () => { floatingWindows.delete(winId); });
+    await w.loadURL(`${origin}/floating.html?${q.toString()}`);
+    return { success: true, winId: winId };
 });
 
-ipcMain.handle('close-floating-window', () => {
-    if (floatingWindow) {
-        floatingWindow.close();
-        floatingWindow = null;
-    }
-    return { success: true };
-});
-
-ipcMain.handle('minimize-floating-window', () => {
-    if (floatingWindow) floatingWindow.minimize();
-    return { success: true };
-});
-
-ipcMain.handle('toggle-maximize-floating-window', () => {
-    if (floatingWindow) {
-        if (floatingWindow.isMaximized()) floatingWindow.unmaximize();
-        else floatingWindow.maximize();
-    }
-    return { success: true };
-});
-
-ipcMain.handle('return-floating-to-main', (event, data) => {
-    if (floatingWindow && mainWindow) {
-        mainWindow.webContents.send('restore-window-in-main', data);
-        floatingWindow.close();
-        floatingWindow = null;
+ipcMain.handle('close-floating-window', (event, winId) => { const f = floatingWindows.get(winId); if (f) f.win.close(); return { success: true }; });
+ipcMain.handle('minimize-floating-window', (event, winId) => { const f = floatingWindows.get(winId); if (f) f.win.minimize(); return { success: true }; });
+ipcMain.handle('toggle-maximize-floating-window', (event, winId) => { const f = floatingWindows.get(winId); if (f) { if (f.win.isMaximized()) f.win.unmaximize(); else f.win.maximize(); } return { success: true }; });
+ipcMain.handle('return-floating-to-main', (event, { winId }) => {
+    const f = floatingWindows.get(winId);
+    if (f && mainWindow) {
+        mainWindow.webContents.send('restore-window-in-main', f.meta);
+        f.win.close();
         mainWindow.focus();
     }
     return { success: true };

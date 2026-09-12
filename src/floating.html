@@ -38,19 +38,35 @@ const isSelf=params.get('isSelf')==='true';
 document.getElementById('title').textContent=(type==='video'?'📹 ':'📺 ')+userName+(isSelf?' (Вы)':'');
 const video=document.getElementById('video');
 if(isSelf)video.muted=true;
-document.getElementById('btn-cls').onclick=()=>window.electronAPI.closeFloatingWindow();
-document.getElementById('btn-min').onclick=()=>window.electronAPI.minimizeFloatingWindow();
-document.getElementById('btn-max').onclick=()=>window.electronAPI.toggleMaximizeFloatingWindow();
-document.getElementById('btn-ret').onclick=()=>window.electronAPI.returnFloatingToMain({type:type});
+const winId=params.get('winId')||'';
+document.getElementById('btn-cls').onclick=()=>window.electronAPI.closeFloatingWindow(winId);
+document.getElementById('btn-min').onclick=()=>window.electronAPI.minimizeFloatingWindow(winId);
+document.getElementById('btn-max').onclick=()=>window.electronAPI.toggleMaximizeFloatingWindow(winId);
+document.getElementById('btn-ret').onclick=()=>window.electronAPI.returnFloatingToMain({winId:winId});
 const peer=new Peer({host:location.hostname,port:3002,path:'/peerjs',secure:location.protocol==='https:',debug:0,config:{iceServers:[]}});
-peer.on('open',()=>{
-const cvs=document.createElement('canvas');cvs.width=4;cvs.height=4;
-const dummy=(cvs.captureStream?cvs.captureStream(1):new MediaStream());
+peer.on('open',async()=>{
+if(isSelf){
+try{
+const stream=type==='video'?await navigator.mediaDevices.getUserMedia({video:true,audio:false}):await navigator.mediaDevices.getDisplayMedia({video:{cursor:'always'},audio:false});
+video.srcObject=stream;
+document.getElementById('status').style.display='none';
+}catch(e){
+document.getElementById('status').textContent='Ошибка: '+e.message;
+document.getElementById('status').style.display='block';
+}
+}else{
+const dummy=new MediaStream();
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+const osc=ctx.createOscillator();osc.frequency.value=0;
+const dst=ctx.createMediaStreamDestination();
+osc.connect(dst);osc.start();
+dummy.addTrack(dst.stream.getAudioTracks()[0]);
 const call=peer.call(targetPeer,dummy,{metadata:{type:type==='video'?'video-req':'screen-req'}});
 if(!call){document.getElementById('status').textContent='Не удалось подключиться';return;}
 call.on('stream',s=>{video.srcObject=s;document.getElementById('status').style.display='none';});
 call.on('close',()=>{document.getElementById('status').textContent='Трансляция завершена';document.getElementById('status').style.display='block';});
 call.on('error',()=>{document.getElementById('status').textContent='Ошибка подключения';document.getElementById('status').style.display='block';});
+}
 });
 peer.on('error',e=>{document.getElementById('status').textContent='Ошибка: '+e.type;document.getElementById('status').style.display='block';});
 (function(){

@@ -210,7 +210,7 @@ const videoBtn=document.createElement('button');
 videoBtn.className='media-show-btn video'+(videoWindows[uniqueKey]?' active':'');
 videoBtn.textContent=videoWindows[uniqueKey]?'✓ Видео':'📹 Видео';
 videoBtn.title=videoWindows[uniqueKey]?'Закрыть видео':'Смотреть видео';
-videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{if(!videoStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');setTimeout(()=>{if(videoStreams[u.peerId])openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
+videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);if(!videoStreams[u.peerId]&&!u.isSelf){ensurePeer().then(()=>{socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');}).catch(()=>{});}}updateMediaUsersList();};
 buttonsDiv.appendChild(videoBtn);
 }
 if(u.hasScreen){
@@ -218,7 +218,7 @@ const screenBtn=document.createElement('button');
 screenBtn.className='media-show-btn screen'+(screenWindows[uniqueKey]?' active':'');
 screenBtn.textContent=screenWindows[uniqueKey]?'✓ Экран':'📺 Экран';
 screenBtn.title=screenWindows[uniqueKey]?'Закрыть экран':'Смотреть экран';
-screenBtn.onclick=()=>{if(screenWindows[uniqueKey]){closeScreenWindow(uniqueKey);}else{if(!screenStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'screen'});showToast('📺 Запрашиваю трансляцию...');setTimeout(()=>{if(screenStreams[u.peerId])openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
+screenBtn.onclick=()=>{if(screenWindows[uniqueKey]){closeScreenWindow(uniqueKey);}else{openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);if(!screenStreams[u.peerId]&&!u.isSelf){ensurePeer().then(()=>{socket.emit('request-media',{userId:u.userId,type:'screen'});showToast('📺 Запрашиваю трансляцию...');}).catch(()=>{});}}updateMediaUsersList();};
 buttonsDiv.appendChild(screenBtn);
 }
 item.appendChild(buttonsDiv);list.appendChild(item);
@@ -246,9 +246,9 @@ if(screenWindows[uniqueKey])return;
 const win=document.createElement('div');win.className='video-window';win.style.width='640px';win.style.height='480px';win.style.left=(150+Object.keys(screenWindows).length*30)+'px';win.style.top=(150+Object.keys(screenWindows).length*30)+'px';
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📺 '+userName;
-const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId);
-const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn fs';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
-const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeVideoWindow(uniqueKey);
+const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openScreenInSeparateWindow(uniqueKey,userName,isSelf,peerId);
+const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn fs';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleScreenFullscreen(uniqueKey);
+const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeScreenWindow(uniqueKey);
 header.appendChild(title);header.appendChild(separateBtn);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
 const video=document.createElement('video');video.autoplay=true;video.playsInline=true;
 const resize=document.createElement('div');resize.className='video-window-resize';
@@ -312,28 +312,25 @@ socket.on('media-requested', async ({ requesterSocketId, requesterPeerId, type }
         }
     } catch (e) { console.error('[media-request]', e); }
 });
-let floatingMeta=null;
 function openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId){
 if(!(window.electronAPI&&window.electronAPI.createFloatingWindow))return;
-floatingMeta={type:'video',uniqueKey:uniqueKey,userName:userName,isSelf:isSelf,peerId:isSelf?myPeerId:peerId};
 closeVideoWindow(uniqueKey);
-window.electronAPI.createFloatingWindow({type:'video',peerId:floatingMeta.peerId,userName:userName,isSelf:isSelf});
+window.electronAPI.createFloatingWindow({type:'video',uniqueKey:uniqueKey,peerId:isSelf?myPeerId:peerId,userName:userName,isSelf:isSelf});
 }
 function openScreenInSeparateWindow(uniqueKey,userName,isSelf,peerId){
 if(!(window.electronAPI&&window.electronAPI.createFloatingWindow))return;
-floatingMeta={type:'screen',uniqueKey:uniqueKey,userName:userName,isSelf:isSelf,peerId:isSelf?myPeerId:peerId};
 closeScreenWindow(uniqueKey);
-window.electronAPI.createFloatingWindow({type:'screen',peerId:floatingMeta.peerId,userName:userName,isSelf:isSelf});
+window.electronAPI.createFloatingWindow({type:'screen',uniqueKey:uniqueKey,peerId:isSelf?myPeerId:peerId,userName:userName,isSelf:isSelf});
 }
 if(window.electronAPI&&window.electronAPI.onRestoreWindowInMain){
-window.electronAPI.onRestoreWindowInMain(()=>{
-const meta=floatingMeta;floatingMeta=null;if(!meta)return;
-if(meta.type==='video')openVideoWindow(meta.uniqueKey,meta.userName,meta.isSelf,meta.peerId);
-else openScreenWindow(meta.uniqueKey,meta.userName,meta.isSelf,meta.peerId);
-const src=meta.type==='video'?videoStreams[meta.peerId]:screenStreams[meta.peerId];
-if(!meta.isSelf&&!src){
-const info=(meta.type==='video'?allUsersWithVideo[meta.uniqueKey]:allUsersWithScreen[meta.uniqueKey])||{};
-if(info.userId)ensurePeer().then(()=>socket.emit('request-media',{userId:info.userId,type:meta.type})).catch(()=>{});
+window.electronAPI.onRestoreWindowInMain((data)=>{
+if(!data||!data.uniqueKey)return;
+if(data.type==='video')openVideoWindow(data.uniqueKey,data.userName,data.isSelf,data.peerId);
+else openScreenWindow(data.uniqueKey,data.userName,data.isSelf,data.peerId);
+const src=data.type==='video'?videoStreams[data.peerId]:screenStreams[data.peerId];
+if(!data.isSelf&&!src){
+const info=(data.type==='video'?allUsersWithVideo[data.uniqueKey]:allUsersWithScreen[data.uniqueKey])||{};
+if(info.userId)ensurePeer().then(()=>socket.emit('request-media',{userId:info.userId,type:data.type})).catch(()=>{});
 }
 updateMediaUsersList();
 });
