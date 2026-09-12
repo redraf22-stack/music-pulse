@@ -107,12 +107,11 @@ let floatingWindow = null;
 
 ipcMain.handle('create-floating-window', async (event, { type, peerId, userName, isSelf }) => {
     if (floatingWindow) {
-        floatingWindow.focus();
-        return { success: true };
+        floatingWindow.close();
     }
     floatingWindow = new BrowserWindow({
-        width: 480,
-        height: 360,
+        width: type === 'video' ? 480 : 640,
+        height: type === 'video' ? 360 : 480,
         x: 100,
         y: 100,
         alwaysOnTop: true,
@@ -121,7 +120,7 @@ ipcMain.handle('create-floating-window', async (event, { type, peerId, userName,
         transparent: false,
         resizable: true,
         minimizable: true,
-        maximizable: false,
+        maximizable: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -136,7 +135,6 @@ ipcMain.handle('create-floating-window', async (event, { type, peerId, userName,
     
     floatingWindow.on('closed', () => {
         floatingWindow = null;
-        if (mainWindow) mainWindow.webContents.send('floating-window-closed');
     });
     
     return { success: true };
@@ -150,19 +148,27 @@ ipcMain.handle('close-floating-window', () => {
     return { success: true };
 });
 
-ipcMain.handle('expand-floating-window', () => {
+ipcMain.handle('minimize-floating-window', () => {
+    if (floatingWindow) floatingWindow.minimize();
+    return { success: true };
+});
+
+ipcMain.handle('toggle-maximize-floating-window', () => {
+    if (floatingWindow) {
+        if (floatingWindow.isMaximized()) floatingWindow.unmaximize();
+        else floatingWindow.maximize();
+    }
+    return { success: true };
+});
+
+ipcMain.handle('return-floating-to-main', (event, data) => {
     if (floatingWindow && mainWindow) {
-        const bounds = floatingWindow.getBounds();
-        mainWindow.webContents.send('expand-floating-to-main', bounds);
+        mainWindow.webContents.send('restore-window-in-main', data);
         floatingWindow.close();
         floatingWindow = null;
         mainWindow.focus();
     }
     return { success: true };
-});
-
-ipcMain.handle('is-main-window-minimized', () => {
-    return mainWindow ? mainWindow.isMinimized() : false;
 });
 
 app.whenReady().then(() => { createWindow(); startLanListener(); });

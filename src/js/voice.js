@@ -12,7 +12,7 @@ function ensurePeer(){
 if(peer&&myPeerId)return Promise.resolve(myPeerId);
 return new Promise((resolve,reject)=>{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});}
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});}
 peer.once('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve(pid);});
 }catch(e){reject(e);}
 });
@@ -41,13 +41,23 @@ let micId=selectedMicId;try{if(typeof resolveDeviceId==='function')micId=await r
 const co={audio:micId?{deviceId:{exact:micId}}:true,video:false};
 try{myStream=await navigator.mediaDevices.getUserMedia(co);}catch(e){if(e.name==='NotFoundError'||e.name==='OverconstrainedError'){myStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}else{throw e;}}
 startSelfSpeakingDetection(myStream);
-peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});
-peer.on('open',pid=>{myPeerId=pid;isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;socket.emit('register-peer-id',pid);updateVoiceEntryButton();updateVoiceControlsInPlayer();socket.emit('join-voice');showToast(translate('connected'));});
+if(!peer){
+peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});
 peer.on('call',handleIncomingCall);
 peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);leaveVoiceChat();});
+}
+if(!myPeerId){await new Promise(res=>{if(myPeerId)return res(myPeerId);peer.once('open',pid=>{myPeerId=pid;res(pid);});});}
+isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;
+socket.emit('register-peer-id',myPeerId);
+updateVoiceEntryButton();updateVoiceControlsInPlayer();
+socket.emit('join-voice');
+showToast(translate('connected'));
 }catch(e){let m=e.message;if(e.name==='NotAllowedError')m=translate('mic_denied');else if(e.name==='NotFoundError')m=translate('mic_not_found');else if(e.name==='SecurityError')m=translate('need_https');showToast(m,true);eb.disabled=false;updateVoiceEntryButton();}
 }
 function handleIncomingCall(call){
+const mtype=call.metadata&&call.metadata.type;
+if(mtype==='video-req'){if(myVideoStream&&myVideoEnabled){call.answer(myVideoStream);}else{call.close();}return;}
+if(mtype==='screen-req'){if(myScreenStream&&myScreenEnabled){call.answer(myScreenStream);}else{call.close();}return;}
 const isVideo=call.metadata&&call.metadata.type==='video';
 const isScreen=call.metadata&&call.metadata.type==='screen';
 if(isVideo){if(myVideoStream)call.answer(myVideoStream);else call.answer();handleVideoCall(call);}
@@ -100,7 +110,7 @@ if(videoWindows[myUniqueKey])closeVideoWindow(myUniqueKey);
 updateMediaUsersList();
 }else{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
 let camId=selectedCameraId;try{if(typeof resolveDeviceId==='function')camId=await resolveDeviceId('videoinput',selectedCameraId);}catch(e){}
 const constraints={video:camId?{deviceId:{exact:camId}}:true,audio:false};
 try{myVideoStream=await navigator.mediaDevices.getUserMedia(constraints);}catch(e){if(e.name==='NotFoundError'||e.name==='OverconstrainedError'){myVideoStream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}else{throw e;}}
@@ -127,7 +137,7 @@ if(screenWindows[myUniqueKey])closeScreenWindow(myUniqueKey);
 updateMediaUsersList();
 }else{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
 myScreenStream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:"always"},audio:false});
 myScreenEnabled=true;
 btn.classList.add('active');btn.innerHTML='📺 Остановить трансляцию';
@@ -219,19 +229,15 @@ buttonsDiv.appendChild(screenBtn);
 item.appendChild(buttonsDiv);list.appendChild(item);
 });
 }
-async function openVideoWindow(uniqueKey,userName,isSelf,peerId){
+function openVideoWindow(uniqueKey,userName,isSelf,peerId){
 if(videoWindows[uniqueKey])return;
-const isMinimized=window.electronAPI&&window.electronAPI.isMainWindowMinimized?await window.electronAPI.isMainWindowMinimized():false;
-if(isMinimized&&window.electronAPI&&window.electronAPI.createFloatingWindow){
-window.electronAPI.createFloatingWindow({type:'video',peerId,userName,isSelf});
-return;
-}
 const win=document.createElement('div');win.className='video-window';win.style.width='480px';win.style.height='360px';win.style.left=(100+Object.keys(videoWindows).length*30)+'px';win.style.top=(100+Object.keys(videoWindows).length*30)+'px';
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📹 '+userName;
+const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId);
 const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
 const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeVideoWindow(uniqueKey);
-header.appendChild(title);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
+header.appendChild(title);header.appendChild(separateBtn);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
 const video=document.createElement('video');video.autoplay=true;video.playsInline=true;if(isSelf)video.muted=true;
 const resize=document.createElement('div');resize.className='video-window-resize';
 win.appendChild(header);win.appendChild(video);win.appendChild(resize);
@@ -240,19 +246,15 @@ document.body.appendChild(win);videoWindows[uniqueKey]=win;
 if(isSelf){if(myVideoStream)video.srcObject=myVideoStream;}else{if(videoStreams[peerId])video.srcObject=videoStreams[peerId];}
 makeVideoDraggable(win,header);makeVideoResizable(win,resize);
 }
-async function openScreenWindow(uniqueKey,userName,isSelf,peerId){
+function openScreenWindow(uniqueKey,userName,isSelf,peerId){
 if(screenWindows[uniqueKey])return;
-const isMinimized=window.electronAPI&&window.electronAPI.isMainWindowMinimized?await window.electronAPI.isMainWindowMinimized():false;
-if(isMinimized&&window.electronAPI&&window.electronAPI.createFloatingWindow){
-window.electronAPI.createFloatingWindow({type:'screen',peerId,userName,isSelf});
-return;
-}
 const win=document.createElement('div');win.className='video-window';win.style.width='640px';win.style.height='480px';win.style.left=(150+Object.keys(screenWindows).length*30)+'px';win.style.top=(150+Object.keys(screenWindows).length*30)+'px';
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📺 '+userName;
+const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openScreenInSeparateWindow(uniqueKey,userName,isSelf,peerId);
 const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleScreenFullscreen(uniqueKey);
 const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeScreenWindow(uniqueKey);
-header.appendChild(title);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
+header.appendChild(title);header.appendChild(separateBtn);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
 const video=document.createElement('video');video.autoplay=true;video.playsInline=true;
 const resize=document.createElement('div');resize.className='video-window-resize';
 win.appendChild(header);win.appendChild(video);win.appendChild(resize);
@@ -314,3 +316,29 @@ socket.on('media-requested', async ({ requesterSocketId, type }) => {
         }
     } catch (e) { console.error('[media-request]', e); }
 });
+let floatingMeta=null;
+function openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId){
+if(!(window.electronAPI&&window.electronAPI.createFloatingWindow))return;
+floatingMeta={type:'video',uniqueKey:uniqueKey,userName:userName,isSelf:isSelf,peerId:isSelf?myPeerId:peerId};
+closeVideoWindow(uniqueKey);
+window.electronAPI.createFloatingWindow({type:'video',peerId:floatingMeta.peerId,userName:userName,isSelf:isSelf});
+}
+function openScreenInSeparateWindow(uniqueKey,userName,isSelf,peerId){
+if(!(window.electronAPI&&window.electronAPI.createFloatingWindow))return;
+floatingMeta={type:'screen',uniqueKey:uniqueKey,userName:userName,isSelf:isSelf,peerId:isSelf?myPeerId:peerId};
+closeScreenWindow(uniqueKey);
+window.electronAPI.createFloatingWindow({type:'screen',peerId:floatingMeta.peerId,userName:userName,isSelf:isSelf});
+}
+if(window.electronAPI&&window.electronAPI.onRestoreWindowInMain){
+window.electronAPI.onRestoreWindowInMain(()=>{
+const meta=floatingMeta;floatingMeta=null;if(!meta)return;
+if(meta.type==='video')openVideoWindow(meta.uniqueKey,meta.userName,meta.isSelf,meta.peerId);
+else openScreenWindow(meta.uniqueKey,meta.userName,meta.isSelf,meta.peerId);
+const src=meta.type==='video'?videoStreams[meta.peerId]:screenStreams[meta.peerId];
+if(!meta.isSelf&&!src){
+const info=(meta.type==='video'?allUsersWithVideo[meta.uniqueKey]:allUsersWithScreen[meta.uniqueKey])||{};
+if(info.userId)ensurePeer().then(()=>socket.emit('request-media',{userId:info.userId,type:meta.type})).catch(()=>{});
+}
+updateMediaUsersList();
+});
+}

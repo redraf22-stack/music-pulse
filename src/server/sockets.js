@@ -73,6 +73,42 @@ module.exports = function (io, R, utils) {
             const target = room.users.find(u => u.id === userId);
             if (target) io.to(target.id).emit('media-requested', { requesterSocketId: socket.id, type });
         });
+        socket.on('request-self-stream', ({ type }) => {
+    if (!socket.roomCode) return;
+    const room = rooms[socket.roomCode];
+    if (!room) return;
+    const vs = room.voiceStates[socket.id];
+    if (!vs) return;
+    if (type === 'video' && vs.videoEnabled) {
+        io.to(socket.roomCode).emit('request-video-from', { requesterSocketId: socket.id });
+    } else if (type === 'screen' && vs.screenEnabled) {
+        io.to(socket.roomCode).emit('request-screen-from', { requesterSocketId: socket.id });
+    }
+});
+
+socket.on('request-video-from', ({ requesterSocketId }) => {
+    if (!peer || !myVideoStream || !myVideoEnabled) return;
+    const targetPeerId = socketToPeer[requesterSocketId];
+    if (!targetPeerId) return;
+    try {
+        const call = peer.call(targetPeerId, myVideoStream, {
+            metadata: { type: 'video', userId: mySocketId, userName: myNickname, tabId: TAB_ID }
+        });
+        handleVideoCall(call);
+    } catch (e) { console.error('[request-video-from]', e); }
+});
+
+socket.on('request-screen-from', ({ requesterSocketId }) => {
+    if (!peer || !myScreenStream || !myScreenEnabled) return;
+    const targetPeerId = socketToPeer[requesterSocketId];
+    if (!targetPeerId) return;
+    try {
+        const call = peer.call(targetPeerId, myScreenStream, {
+            metadata: { type: 'screen', userId: mySocketId, userName: myNickname, tabId: TAB_ID }
+        });
+        handleScreenCall(call);
+    } catch (e) { console.error('[request-screen-from]', e); }
+});
         socket.on('kick-user', id => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const u = room.users.find(x => x.id === id); if (!u || u.isAdmin) return; const ts = io.sockets.sockets.get(id); if (ts) { ts.emit('kicked'); ts.leave(socket.roomCode); } room.users = room.users.filter(x => x.id !== id); delete room.voiceStates[id]; R.broadcastUsers(socket.roomCode); });
         socket.on('ban-user', id => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const u = room.users.find(x => x.id === id); if (!u || u.isAdmin) return; const ts = io.sockets.sockets.get(id); if (ts) { if (!room.bannedIps) room.bannedIps = []; if (!room.bannedIps.includes(ts.clientIp)) room.bannedIps.push(ts.clientIp); ts.emit('banned'); ts.leave(socket.roomCode); } room.users = room.users.filter(x => x.id !== id); delete room.voiceStates[id]; R.broadcastUsers(socket.roomCode); });
         socket.on('toggle-voice-chat', en => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.voiceEnabled = !!en; if (!en) { room.voiceStates = {}; io.to(socket.roomCode).emit('voice-chat-disabled'); } io.to(socket.roomCode).emit('voice-status', room.voiceEnabled); R.broadcastUsers(socket.roomCode); });

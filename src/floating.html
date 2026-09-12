@@ -5,57 +5,60 @@
 <title>Трансляция</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#000;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;}
-.header{position:fixed;top:0;left:0;right:0;height:32px;background:rgba(0,0,0,.85);display:flex;align-items:center;padding:0 10px;z-index:10;-webkit-app-region:drag;}
-.header-title{flex:1;color:#fff;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.header-btn{background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:4px 8px;border-radius:4px;-webkit-app-region:no-drag;}
-.header-btn:hover{background:rgba(255,255,255,.2);}
-.header-btn.close:hover{background:#e74c3c;}
-video{width:100vw;height:100vh;object-fit:contain;background:#000;}
-.resize{position:absolute;bottom:0;right:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#888 50%,#888 60%,transparent 60%,transparent 70%,#888 70%,#888 80%,transparent 80%);}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;user-select:none;}
+.header{position:fixed;top:0;left:0;right:0;height:34px;background:rgba(20,20,20,.92);display:flex;align-items:center;gap:2px;padding:0 6px;z-index:10;-webkit-app-region:drag;}
+.header-title{flex:1;color:#eee;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:6px;}
+.hbtn{background:none;border:none;color:#bbb;font-size:13px;cursor:pointer;padding:5px 9px;border-radius:5px;-webkit-app-region:no-drag;line-height:1;}
+.hbtn:hover{background:rgba(255,255,255,.15);color:#fff;}
+.hbtn.ret:hover{background:#1db954;color:#000;}
+.hbtn.cls:hover{background:#e74c3c;color:#fff;}
+video{position:absolute;top:34px;left:0;width:100%;height:calc(100% - 34px);object-fit:contain;background:#000;}
+.resize{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:11;background:linear-gradient(135deg,transparent 50%,#777 50%,#777 62%,transparent 62%,transparent 72%,#777 72%,#777 84%,transparent 84%);}
+.status{position:absolute;top:44px;left:50%;transform:translateX(-50%);color:#888;font-size:12px;z-index:5;}
 </style>
 </head>
 <body>
 <div class="header">
-<div class="header-title" id="title">📺 Трансляция</div>
-<button class="header-btn" onclick="expandToMain()" title="Развернуть в приложение">⛶</button>
-<button class="header-btn close" onclick="closeWindow()" title="Закрыть">✕</button>
+<div class="header-title" id="title">📺 …</div>
+<button class="hbtn ret" id="btn-ret" title="Вернуть в приложение">⬅</button>
+<button class="hbtn" id="btn-min" title="Свернуть">—</button>
+<button class="hbtn" id="btn-max" title="На весь экран">⛶</button>
+<button class="hbtn cls" id="btn-cls" title="Закрыть">✕</button>
 </div>
+<div class="status" id="status">Подключение…</div>
 <video id="video" autoplay playsinline></video>
 <div class="resize" id="resize"></div>
-<script src="js/helpers.js"></script>
+<script src="https://unpkg.com/peerjs@1/dist/peerjs.min.js"></script>
 <script>
-const params=new URLSearchParams(window.location.search);
-const type=params.get('type');
-const peerId=params.get('peerId');
-const userName=params.get('userName');
+const params=new URLSearchParams(location.search);
+const type=params.get('type')||'screen';
+const targetPeer=params.get('peerId')||'';
+const userName=decodeURIComponent(params.get('userName')||'');
 const isSelf=params.get('isSelf')==='true';
-
-document.getElementById('title').textContent=(type==='video'?'📹':'📺')+' '+decodeURIComponent(userName);
+document.getElementById('title').textContent=(type==='video'?'📹 ':'📺 ')+userName+(isSelf?' (Вы)':'');
 const video=document.getElementById('video');
 if(isSelf)video.muted=true;
-
-// Получаем стрим через PeerJS
-const peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:0});
+document.getElementById('btn-cls').onclick=()=>window.electronAPI.closeFloatingWindow();
+document.getElementById('btn-min').onclick=()=>window.electronAPI.minimizeFloatingWindow();
+document.getElementById('btn-max').onclick=()=>window.electronAPI.toggleMaximizeFloatingWindow();
+document.getElementById('btn-ret').onclick=()=>window.electronAPI.returnFloatingToMain({type:type});
+const peer=new Peer({host:location.hostname,port:3002,path:'/peerjs',secure:location.protocol==='https:',debug:0,config:{iceServers:[]}});
 peer.on('open',()=>{
-if(isSelf){
-window.electronAPI.getMyStream().then(stream=>{if(stream)video.srcObject=stream;});
-}else{
-peer.call(peerId,new MediaStream()).then(call=>{
-call.on('stream',stream=>{video.srcObject=stream;});
+const cvs=document.createElement('canvas');cvs.width=4;cvs.height=4;
+const dummy=(cvs.captureStream?cvs.captureStream(1):new MediaStream());
+const call=peer.call(targetPeer,dummy,{metadata:{type:type==='video'?'video-req':'screen-req'}});
+if(!call){document.getElementById('status').textContent='Не удалось подключиться';return;}
+call.on('stream',s=>{video.srcObject=s;document.getElementById('status').style.display='none';});
+call.on('close',()=>{document.getElementById('status').textContent='Трансляция завершена';document.getElementById('status').style.display='block';});
+call.on('error',()=>{document.getElementById('status').textContent='Ошибка подключения';document.getElementById('status').style.display='block';});
 });
-}
-});
-
-function closeWindow(){window.electronAPI.closeFloatingWindow();}
-function expandToMain(){window.electronAPI.expandFloatingWindow();}
-
-// Ресайз
-const resize=document.getElementById('resize');
-let isResizing=false,startX,startY,startW,startH;
-resize.addEventListener('mousedown',e=>{isResizing=true;startX=e.clientX;startY=e.clientY;startW=window.outerWidth;startH=window.outerHeight;e.preventDefault();});
-document.addEventListener('mousemove',e=>{if(!isResizing)return;window.resizeTo(startW+(e.clientX-startX),startH+(e.clientY-startY));});
-document.addEventListener('mouseup',()=>{isResizing=false;});
+peer.on('error',e=>{document.getElementById('status').textContent='Ошибка: '+e.type;document.getElementById('status').style.display='block';});
+(function(){
+const r=document.getElementById('resize');let on=false,sx,sy,sw,sh;
+r.addEventListener('mousedown',e=>{on=true;sx=e.screenX;sy=e.screenY;sw=window.outerWidth;sh=window.outerHeight;e.preventDefault();});
+window.addEventListener('mousemove',e=>{if(!on)return;window.resizeTo(Math.max(320,sw+e.screenX-sx),Math.max(240,sh+e.screenY-sy));});
+window.addEventListener('mouseup',()=>{on=false;});
+})();
 </script>
 </body>
 </html>

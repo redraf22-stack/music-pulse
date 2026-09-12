@@ -58,7 +58,7 @@ module.exports = function (app, utils) {
         const room = roomCode && ROOMS && ROOMS[roomCode] ? ROOMS[roomCode] : null;
         if (room) {
             // Берём треки из АКТИВНОГО плейлиста
-            const plTracks = await require('./playlists.js').resolveTracks(room, true);
+            const plTracks = await require('./playlists.js').resolveTracks(room, false);
             combined = plTracks.map(t => ({
             ...t,
             normalizedTitle: utils.normalizeStr(t.title),
