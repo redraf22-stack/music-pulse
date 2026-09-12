@@ -55,17 +55,16 @@ document.getElementById('status').textContent='Ошибка: '+e.message;
 document.getElementById('status').style.display='block';
 }
 }else{
-const dummy=new MediaStream();
-const ctx=new (window.AudioContext||window.webkitAudioContext)();
-const osc=ctx.createOscillator();osc.frequency.value=0;
-const dst=ctx.createMediaStreamDestination();
-osc.connect(dst);osc.start();
-dummy.addTrack(dst.stream.getAudioTracks()[0]);
+const cvs=document.createElement('canvas');cvs.width=64;cvs.height=64;
+const cctx=cvs.getContext('2d');cctx.fillStyle='#000';cctx.fillRect(0,0,64,64);
+const dummy=(cvs.captureStream?cvs.captureStream(5):new MediaStream());
 const call=peer.call(targetPeer,dummy,{metadata:{type:type==='video'?'video-req':'screen-req'}});
 if(!call){document.getElementById('status').textContent='Не удалось подключиться';return;}
-call.on('stream',s=>{video.srcObject=s;document.getElementById('status').style.display='none';});
-call.on('close',()=>{document.getElementById('status').textContent='Трансляция завершена';document.getElementById('status').style.display='block';});
-call.on('error',()=>{document.getElementById('status').textContent='Ошибка подключения';document.getElementById('status').style.display='block';});
+let got=false;
+const timer=setTimeout(()=>{if(!got)document.getElementById('status').textContent='Нет ответа от транслятора';},10000);
+call.on('stream',s=>{got=true;clearTimeout(timer);video.srcObject=s;document.getElementById('status').style.display='none';});
+call.on('close',()=>{clearTimeout(timer);document.getElementById('status').textContent='Трансляция завершена';document.getElementById('status').style.display='block';});
+call.on('error',()=>{clearTimeout(timer);document.getElementById('status').textContent='Ошибка подключения';document.getElementById('status').style.display='block';});
 }
 });
 peer.on('error',e=>{document.getElementById('status').textContent='Ошибка: '+e.type;document.getElementById('status').style.display='block';});
