@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
+    createFloatingWindow: (opts) => ipcRenderer.invoke('create-floating-window', opts),
+    closeFloatingWindow: () => ipcRenderer.invoke('close-floating-window'),
+    expandFloatingWindow: () => ipcRenderer.invoke('expand-floating-window'),
+    isMainWindowMinimized: () => ipcRenderer.invoke('is-main-window-minimized'),
+    onFloatingWindowClosed: (cb) => ipcRenderer.on('floating-window-closed', cb),
+    onExpandFloatingToMain: (cb) => ipcRenderer.on('expand-floating-to-main', (event, bounds) => cb(bounds)),
     getDeviceSettings: () => ipcRenderer.invoke('get-device-settings'),
     setDeviceSettings: (d) => ipcRenderer.invoke('set-device-settings', d),
     getAutostart: () => ipcRenderer.invoke('get-autostart'),
@@ -13,4 +19,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setMusicDir: (dir) => ipcRenderer.invoke('set-music-dir', dir),
     startMusicShare: () => ipcRenderer.invoke('start-music-share'),
     getLanIp: () => ipcRenderer.invoke('get-lan-ip')
+    
 });

@@ -219,8 +219,13 @@ buttonsDiv.appendChild(screenBtn);
 item.appendChild(buttonsDiv);list.appendChild(item);
 });
 }
-function openVideoWindow(uniqueKey,userName,isSelf,peerId){
+async function openVideoWindow(uniqueKey,userName,isSelf,peerId){
 if(videoWindows[uniqueKey])return;
+const isMinimized=window.electronAPI&&window.electronAPI.isMainWindowMinimized?await window.electronAPI.isMainWindowMinimized():false;
+if(isMinimized&&window.electronAPI&&window.electronAPI.createFloatingWindow){
+window.electronAPI.createFloatingWindow({type:'video',peerId,userName,isSelf});
+return;
+}
 const win=document.createElement('div');win.className='video-window';win.style.width='480px';win.style.height='360px';win.style.left=(100+Object.keys(videoWindows).length*30)+'px';win.style.top=(100+Object.keys(videoWindows).length*30)+'px';
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📹 '+userName;
@@ -235,8 +240,13 @@ document.body.appendChild(win);videoWindows[uniqueKey]=win;
 if(isSelf){if(myVideoStream)video.srcObject=myVideoStream;}else{if(videoStreams[peerId])video.srcObject=videoStreams[peerId];}
 makeVideoDraggable(win,header);makeVideoResizable(win,resize);
 }
-function openScreenWindow(uniqueKey,userName,isSelf,peerId){
+async function openScreenWindow(uniqueKey,userName,isSelf,peerId){
 if(screenWindows[uniqueKey])return;
+const isMinimized=window.electronAPI&&window.electronAPI.isMainWindowMinimized?await window.electronAPI.isMainWindowMinimized():false;
+if(isMinimized&&window.electronAPI&&window.electronAPI.createFloatingWindow){
+window.electronAPI.createFloatingWindow({type:'screen',peerId,userName,isSelf});
+return;
+}
 const win=document.createElement('div');win.className='video-window';win.style.width='640px';win.style.height='480px';win.style.left=(150+Object.keys(screenWindows).length*30)+'px';win.style.top=(150+Object.keys(screenWindows).length*30)+'px';
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📺 '+userName;

@@ -103,6 +103,68 @@ function createWindow() {
     mainWindow.on('closed', () => { mainWindow = null; });
 }
 
+let floatingWindow = null;
+
+ipcMain.handle('create-floating-window', async (event, { type, peerId, userName, isSelf }) => {
+    if (floatingWindow) {
+        floatingWindow.focus();
+        return { success: true };
+    }
+    floatingWindow = new BrowserWindow({
+        width: 480,
+        height: 360,
+        x: 100,
+        y: 100,
+        alwaysOnTop: true,
+        skipTaskbar: false,
+        frame: false,
+        transparent: false,
+        resizable: true,
+        minimizable: true,
+        maximizable: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false
+        },
+        title: `${type === 'video' ? '📹' : '📺'} ${userName}`
+    });
+    
+    const proto = localServer && localServer.isHttps ? 'https' : 'http';
+    const url = `${proto}://localhost:3001/floating.html?type=${type}&peerId=${encodeURIComponent(peerId)}&userName=${encodeURIComponent(userName)}&isSelf=${isSelf}`;
+    await floatingWindow.loadURL(url);
+    
+    floatingWindow.on('closed', () => {
+        floatingWindow = null;
+        if (mainWindow) mainWindow.webContents.send('floating-window-closed');
+    });
+    
+    return { success: true };
+});
+
+ipcMain.handle('close-floating-window', () => {
+    if (floatingWindow) {
+        floatingWindow.close();
+        floatingWindow = null;
+    }
+    return { success: true };
+});
+
+ipcMain.handle('expand-floating-window', () => {
+    if (floatingWindow && mainWindow) {
+        const bounds = floatingWindow.getBounds();
+        mainWindow.webContents.send('expand-floating-to-main', bounds);
+        floatingWindow.close();
+        floatingWindow = null;
+        mainWindow.focus();
+    }
+    return { success: true };
+});
+
+ipcMain.handle('is-main-window-minimized', () => {
+    return mainWindow ? mainWindow.isMinimized() : false;
+});
+
 app.whenReady().then(() => { createWindow(); startLanListener(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
