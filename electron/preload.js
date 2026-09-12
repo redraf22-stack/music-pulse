@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
+    closeFloatingWindows: (f) => ipcRenderer.invoke('close-floating-windows', f || {}),
     createFloatingWindow: (o) => ipcRenderer.invoke('create-floating-window', o),
     closeFloatingWindow: (id) => ipcRenderer.invoke('close-floating-window', id),
     minimizeFloatingWindow: (id) => ipcRenderer.invoke('minimize-floating-window', id),

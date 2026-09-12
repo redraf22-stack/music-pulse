@@ -463,3 +463,13 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:5px;top:
 #room-device-modal .lang-switch{display:flex;gap:8px;}
 #room-device-modal .lang-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--sub);font-weight:bold;font-size:14px;cursor:pointer;text-align:center;}
 #room-device-modal .lang-btn.active{background:var(--accent);color:black;border-color:var(--accent);}
+/* Зоны перетаскивания окна (titlebar hidden) */
+.sidebar-header{-webkit-app-region:drag;}
+.sidebar-header button,.sidebar-header .room-code-display{-webkit-app-region:no-drag;}
+.playlist-bar button{-webkit-app-region:no-drag;}
+.chat-header{-webkit-app-region:drag;}
+.chat-header button{-webkit-app-region:no-drag;}
+/* Контент ниже тёмного титулбара */
+body{padding-top:32px !important;}
+.chat-fab{top:42px !important;}
+.playlist-bar{padding-right:8px !important;box-sizing:border-box;}

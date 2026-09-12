@@ -13,6 +13,17 @@ Menu.setApplicationMenu(null);
 
 const LAN_LISTEN_PORT = 33335;
 let mainWindow = null, localServer = null, lanListener = null, foundServers = [];
+if (!app.requestSingleInstanceLock()) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+}
 
 app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
     event.preventDefault();
@@ -43,6 +54,8 @@ function createWindow() {
         width: 1400, height: 900, minWidth: 1000, minHeight: 700,
         icon: path.join(__dirname, '../build/icon.ico'),
         autoHideMenuBar: true,
+        titleBarStyle: 'hidden',
+        titleBarOverlay: { color: '#181818', symbolColor: '#d0d0d0', height: 32 },
         webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
         title: 'MusicPulse'
     });
@@ -139,6 +152,17 @@ ipcMain.handle('return-floating-to-main', (event, { winId }) => {
         f.win.close();
         mainWindow.focus();
     }
+    return { success: true };
+});
+ipcMain.handle('close-floating-windows', (event, filter) => {
+    const f = filter || {};
+    [...floatingWindows.entries()].forEach(([id, entry]) => {
+        const m = entry.meta || {};
+        const okType = !f.type || m.type === f.type;
+        const okSelf = !f.isSelf || m.isSelf === true;
+        const okPeer = !f.peerId || m.peerId === f.peerId;
+        if (okType && okSelf && okPeer) entry.win.close();
+    });
     return { success: true };
 });
 

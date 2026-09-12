@@ -96,7 +96,8 @@ socketToPeer[id]=peerId;peerToSocket[peerId]=id;
 if(!currentCalls[peerId]){const call=peer.call(peerId,myStream);handleAudioCall(call);}
 setTimeout(()=>updateMediaUsersList(),500);
 });
-socket.on('user-left-voice',({id,peerId})=>{const tp=peerId||socketToPeer[id];if(id)delete socketToPeer[id];if(tp)delete peerToSocket[tp];if(currentCalls[tp]){try{if(currentCalls[tp]._audioElement){currentCalls[tp]._audioElement.pause();currentCalls[tp]._audioElement.remove();}if(currentCalls[tp]._gainNode)currentCalls[tp]._gainNode.disconnect();if(currentCalls[tp]._sourceNode)currentCalls[tp]._sourceNode.disconnect();if(currentCalls[tp]._shaperNode)currentCalls[tp]._shaperNode.disconnect();currentCalls[tp].close();}catch(e){}stopSpeakingDetection(tp);delete currentCalls[tp];}if(videoCalls[tp]){try{videoCalls[tp].close();}catch(e){}delete videoCalls[tp];delete videoStreams[tp];const uk=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===tp);if(uk){delete videoUserInfo[uk];delete allUsersWithVideo[uk];if(videoWindows[uk])closeVideoWindow(uk);}}if(screenCalls[tp]){try{screenCalls[tp].close();}catch(e){}delete screenCalls[tp];delete screenStreams[tp];const uk=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===tp);if(uk){delete screenUserInfo[uk];delete allUsersWithScreen[uk];if(screenWindows[uk])closeScreenWindow(uk);}}updateMediaUsersList();});
+socket.on('user-left-voice',({id,peerId})=>{const tp=peerId||socketToPeer[id];if(id)delete socketToPeer[id];if(tp)delete peerToSocket[tp];if(currentCalls[tp]){try{if(currentCalls[tp]._audioElement){currentCalls[tp]._audioElement.pause();currentCalls[tp]._audioElement.remove();}if(currentCalls[tp]._gainNode)currentCalls[tp]._gainNode.disconnect();if(currentCalls[tp]._sourceNode)currentCalls[tp]._sourceNode.disconnect();if(currentCalls[tp]._shaperNode)currentCalls[tp]._shaperNode.disconnect();currentCalls[tp].close();}catch(e){}stopSpeakingDetection(tp);delete currentCalls[tp];}if(videoCalls[tp]){try{videoCalls[tp].close();}catch(e){}delete videoCalls[tp];delete videoStreams[tp];const uk=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===tp);if(uk){delete videoUserInfo[uk];delete allUsersWithVideo[uk];if(videoWindows[uk])closeVideoWindow(uk);}}if(screenCalls[tp]){try{screenCalls[tp].close();}catch(e){}delete screenCalls[tp];delete screenStreams[tp];const uk=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===tp);if(uk){delete screenUserInfo[uk];delete allUsersWithScreen[uk];if(screenWindows[uk])closeScreenWindow(uk);}}if(tp&&window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({peerId:tp});
+updateMediaUsersList();});
 async function toggleVideo(){
 const btn=document.getElementById('video-toggle-btn');
 if(myVideoEnabled){
@@ -104,6 +105,7 @@ myVideoEnabled=false;btn.classList.remove('active');btn.innerHTML='📷 Вклю
 if(myVideoStream){myVideoStream.getTracks().forEach(t=>{t.stop();});myVideoStream=null;}
 socket.emit('toggle-video',false,TAB_ID);
 Object.keys(allUsersWithVideo).forEach(k=>{if(allUsersWithVideo[k].userId===mySocketId){delete allUsersWithVideo[k];delete videoUserInfo[k];if(videoWindows[k])closeVideoWindow(k);}});
+if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({type:'video',isSelf:true});
 updateMediaUsersList();
 }else{
 try{
@@ -127,6 +129,7 @@ myScreenEnabled=false;btn.classList.remove('active');btn.innerHTML='📺 Тра�
 if(myScreenStream){myScreenStream.getTracks().forEach(t=>{t.stop();});myScreenStream=null;}
 socket.emit('toggle-screen',false,TAB_ID);
 Object.keys(allUsersWithScreen).forEach(k=>{if(allUsersWithScreen[k].userId===mySocketId){delete allUsersWithScreen[k];delete screenUserInfo[k];if(screenWindows[k])closeScreenWindow(k);}});
+if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({type:'screen',isSelf:true});
 updateMediaUsersList();
 }else{
 try{
@@ -156,6 +159,7 @@ socket.on('user-video-state',({userId,peerId,userName,enabled,tabId,isAdmin,isMo
         Object.keys(allUsersWithVideo).forEach(k=>{if(allUsersWithVideo[k].userId===userId){delete allUsersWithVideo[k];delete videoUserInfo[k];if(videoWindows[k])closeVideoWindow(k);}});
         if(videoCalls[peerId]){try{videoCalls[peerId].close();}catch(e){}delete videoCalls[peerId];delete videoStreams[peerId];}
         if(videoWindows[uniqueKey])closeVideoWindow(uniqueKey);
+        if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({type:'video',peerId:peerId});
     }
     updateMediaUsersList();
 });
@@ -171,6 +175,7 @@ socket.on('user-screen-state',({userId,peerId,userName,enabled,tabId,isAdmin,isM
         Object.keys(allUsersWithScreen).forEach(k=>{if(allUsersWithScreen[k].userId===userId){delete allUsersWithScreen[k];delete screenUserInfo[k];if(screenWindows[k])closeScreenWindow(k);}});
         if(screenCalls[peerId]){try{screenCalls[peerId].close();}catch(e){}delete screenCalls[peerId];delete screenStreams[peerId];}
         if(screenWindows[uniqueKey])closeScreenWindow(uniqueKey);
+        if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({type:'screen',peerId:peerId});
     }
     updateMediaUsersList();
 });

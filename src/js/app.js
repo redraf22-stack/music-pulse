@@ -56,6 +56,7 @@ function leaveRoom(){
 const msg=myRole==='admin'?translate('leave_admin_confirm'):translate('leave_user_confirm');
 showConfirm('🚪',translate('leave_room_title'),msg,function(){
 try{socket.emit('leave-room');}catch(e){}
+if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});
 techOpen=false;voteOpen=false;
 const tp=document.getElementById('tech-settings-panel');if(tp)tp.style.display='none';
 const vp=document.getElementById('admin-controls');if(vp)vp.style.display='none';
@@ -68,10 +69,10 @@ function updateLanButton(){const b=document.getElementById('lan-toggle-btn');if(
 function copyRoomCode(){if(!currentRoomCode)return;navigator.clipboard.writeText(currentRoomCode).then(()=>showToast(translate('copied')));}
 function regenerateCode(){if(myRole!=='admin')return;showConfirm('🔑',translate('confirm_regen_title'),translate('confirm_regen_msg'),()=>{socket.emit('regenerate-room-code');});}
 socket.on('room-code-changed',c=>{currentRoomCode=c;document.getElementById('room-code-el').innerText=c;showToast(translate('code_changed'));});
-socket.on('kicked',()=>{showAlert('❌','Кик',translate('kicked_msg'));setTimeout(backToStart,2000);});
-socket.on('banned',()=>{showAlert('🚫','Бан',translate('banned_msg'));setTimeout(backToStart,2000);});
-socket.on('room-closed',()=>{showAlert('👋','Комната закрыта',translate('admin_left'));setTimeout(backToStart,2000);});
-socket.on('disconnect',()=>{if(currentRoomCode){showAlert('👋','Связь потеряна','Хост вышел из комнаты или сервер недоступен.');setTimeout(backToStart,2500);}});
+socket.on('kicked',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('❌','Кик',translate('kicked_msg'));setTimeout(backToStart,2000);});
+socket.on('banned',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('🚫','Бан',translate('banned_msg'));setTimeout(backToStart,2000);});
+socket.on('room-closed',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('👋','Комната закрыта',translate('admin_left'));setTimeout(backToStart,2000);});
+socket.on('disconnect',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});if(currentRoomCode){showAlert('👋','Связь потеряна','Хост вышел из комнаты или сервер недоступен.');setTimeout(backToStart,2500);}});
 socket.on('voice-status',e=>{voiceChatEnabled=e;if(myRole==='admin')updateVoiceToggleButton();if(!e&&isInVoice)leaveVoiceChat();updateVoiceEntryButton();});
 socket.on('voice-chat-disabled',()=>{if(isInVoice)leaveVoiceChat();voiceChatEnabled=false;updateVoiceEntryButton();});
 function toggleVoiceChatSetting(){if(myRole!=='admin')return;socket.emit('toggle-voice-chat',!voiceChatEnabled);}

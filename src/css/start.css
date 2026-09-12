@@ -61,3 +61,5 @@ input[type="checkbox"]{-webkit-appearance:none;appearance:none;width:18px;height
 input[type="checkbox"]:hover{border-color:#888;}
 input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent);}
 input[type="checkbox"]:checked::after{content:'';position:absolute;left:5px;top:1px;width:4px;height:9px;border:solid white;border-width:0 2px 2px 0;transform:rotate(45deg);}
+.auth-box{-webkit-app-region:drag;}
+.auth-box input,.auth-box button,.auth-box .server-list,.auth-box .manual-row,.auth-box .https-row,.auth-box .settings-open-btn,.auth-box .ac-wrapper{-webkit-app-region:no-drag;}
