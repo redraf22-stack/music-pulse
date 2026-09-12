@@ -12,7 +12,7 @@ function ensurePeer(){
 if(peer&&myPeerId)return Promise.resolve(myPeerId);
 return new Promise((resolve,reject)=>{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});}
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});}
 peer.once('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve(pid);});
 }catch(e){reject(e);}
 });
@@ -37,21 +37,13 @@ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showToast(tran
 const c=getGlobalAudioContext();if(c&&c.state==='suspended')await c.resume();
 const eb=document.getElementById('voice-entry-btn');eb.innerHTML=translate('connecting');eb.disabled=true;
 try{
-let micId=selectedMicId;try{if(typeof resolveDeviceId==='function')micId=await resolveDeviceId('audioinput',selectedMicId);}catch(e){}
-const co={audio:micId?{deviceId:{exact:micId}}:true,video:false};
-try{myStream=await navigator.mediaDevices.getUserMedia(co);}catch(e){if(e.name==='NotFoundError'||e.name==='OverconstrainedError'){myStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}else{throw e;}}
+const co={audio:selectedMicId?{deviceId:{exact:selectedMicId}}:true,video:false};
+myStream=await navigator.mediaDevices.getUserMedia(co);
 startSelfSpeakingDetection(myStream);
-if(!peer){
-peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});
+peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});
+peer.on('open',pid=>{myPeerId=pid;isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;socket.emit('register-peer-id',pid);updateVoiceEntryButton();updateVoiceControlsInPlayer();socket.emit('join-voice');showToast(translate('connected'));});
 peer.on('call',handleIncomingCall);
 peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);leaveVoiceChat();});
-}
-if(!myPeerId){await new Promise(res=>{if(myPeerId)return res(myPeerId);peer.once('open',pid=>{myPeerId=pid;res(pid);});});}
-isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;
-socket.emit('register-peer-id',myPeerId);
-updateVoiceEntryButton();updateVoiceControlsInPlayer();
-socket.emit('join-voice');
-showToast(translate('connected'));
 }catch(e){let m=e.message;if(e.name==='NotAllowedError')m=translate('mic_denied');else if(e.name==='NotFoundError')m=translate('mic_not_found');else if(e.name==='SecurityError')m=translate('need_https');showToast(m,true);eb.disabled=false;updateVoiceEntryButton();}
 }
 function handleIncomingCall(call){
@@ -110,11 +102,9 @@ if(videoWindows[myUniqueKey])closeVideoWindow(myUniqueKey);
 updateMediaUsersList();
 }else{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
-let camId=selectedCameraId;try{if(typeof resolveDeviceId==='function')camId=await resolveDeviceId('videoinput',selectedCameraId);}catch(e){}
-const constraints={video:camId?{deviceId:{exact:camId}}:true,audio:false};
-try{myVideoStream=await navigator.mediaDevices.getUserMedia(constraints);}catch(e){if(e.name==='NotFoundError'||e.name==='OverconstrainedError'){myVideoStream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}else{throw e;}}
-myVideoEnabled=true;
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
+const constraints={video:selectedCameraId?{deviceId:{exact:selectedCameraId}}:true,audio:false};
+myVideoStream=await navigator.mediaDevices.getUserMedia(constraints);myVideoEnabled=true;
 btn.classList.add('active');btn.innerHTML='📷 Выключить видеосвязь';
 socket.emit('toggle-video',true,TAB_ID);
 const myUniqueKey=myPeerId+'_'+TAB_ID;
@@ -137,7 +127,7 @@ if(screenWindows[myUniqueKey])closeScreenWindow(myUniqueKey);
 updateMediaUsersList();
 }else{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1,config:{iceServers:[]}});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});await new Promise(resolve=>{peer.on('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve();});});}
 myScreenStream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:"always"},audio:false});
 myScreenEnabled=true;
 btn.classList.add('active');btn.innerHTML='📺 Остановить трансляцию';
@@ -156,7 +146,7 @@ socket.on('user-video-state',({userId,peerId,userName,enabled,tabId,isAdmin,isMo
     const uniqueKey=peerId+'_'+(tabId||'unknown');
     if(enabled){
         allUsersWithVideo[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
-        if(!videoStreams[peerId]){ensurePeer().then(()=>socket.emit('request-media',{userId:userId,type:'video'})).catch(()=>{});}
+        if(!videoStreams[peerId]){socket.emit('request-media',{userId:userId,type:'video'});}
     }else{
         delete allUsersWithVideo[uniqueKey];
         delete videoUserInfo[uniqueKey];
@@ -170,7 +160,7 @@ socket.on('user-screen-state',({userId,peerId,userName,enabled,tabId,isAdmin,isM
     const uniqueKey=peerId+'_'+(tabId||'unknown');
     if(enabled){
         allUsersWithScreen[uniqueKey]={userId,userName,peerId,isAdmin:isAdmin||false,isMod:isMod||false,isVip:isVip||false,tabId,isSelf:false};
-        if(!screenStreams[peerId]){ensurePeer().then(()=>socket.emit('request-media',{userId:userId,type:'screen'})).catch(()=>{});}
+        if(!screenStreams[peerId]){socket.emit('request-media',{userId:userId,type:'screen'});}
     }else{
         delete allUsersWithScreen[uniqueKey];
         delete screenUserInfo[uniqueKey];
@@ -215,7 +205,7 @@ const videoBtn=document.createElement('button');
 videoBtn.className='media-show-btn video'+(videoWindows[uniqueKey]?' active':'');
 videoBtn.textContent=videoWindows[uniqueKey]?'✓ Видео':'📹 Видео';
 videoBtn.title=videoWindows[uniqueKey]?'Закрыть видео':'Смотреть видео';
-videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);if(!videoStreams[u.peerId]&&!u.isSelf){ensurePeer().then(()=>{socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');}).catch(()=>{});}}updateMediaUsersList();};
+videoBtn.onclick=()=>{if(videoWindows[uniqueKey]){closeVideoWindow(uniqueKey);}else{if(!videoStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'video'});showToast('📹 Запрашиваю видео...');setTimeout(()=>{if(videoStreams[u.peerId])openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openVideoWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
 buttonsDiv.appendChild(videoBtn);
 }
 if(u.hasScreen){
@@ -223,7 +213,7 @@ const screenBtn=document.createElement('button');
 screenBtn.className='media-show-btn screen'+(screenWindows[uniqueKey]?' active':'');
 screenBtn.textContent=screenWindows[uniqueKey]?'✓ Экран':'📺 Экран';
 screenBtn.title=screenWindows[uniqueKey]?'Закрыть экран':'Смотреть экран';
-screenBtn.onclick=()=>{if(screenWindows[uniqueKey]){closeScreenWindow(uniqueKey);}else{openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);if(!screenStreams[u.peerId]&&!u.isSelf){ensurePeer().then(()=>{socket.emit('request-media',{userId:u.userId,type:'screen'});showToast('📺 Запрашиваю трансляцию...');}).catch(()=>{});}}updateMediaUsersList();};
+screenBtn.onclick=()=>{if(screenWindows[uniqueKey]){closeScreenWindow(uniqueKey);}else{if(!screenStreams[u.peerId]&&!u.isSelf){socket.emit('request-media',{userId:u.userId,type:'screen'});showToast('📺 Запрашиваю трансляцию...');setTimeout(()=>{if(screenStreams[u.peerId])openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);updateMediaUsersList();},1500);}else{openScreenWindow(uniqueKey,u.userName,u.isSelf,u.peerId);}}updateMediaUsersList();};
 buttonsDiv.appendChild(screenBtn);
 }
 item.appendChild(buttonsDiv);list.appendChild(item);
@@ -251,9 +241,9 @@ if(screenWindows[uniqueKey])return;
 const win=document.createElement('div');win.className='video-window';win.style.width='640px';win.style.height='480px';win.style.left=(150+Object.keys(screenWindows).length*30)+'px';win.style.top=(150+Object.keys(screenWindows).length*30)+'px';
 const header=document.createElement('div');header.className='video-window-header';
 const title=document.createElement('div');title.className='video-window-title';title.textContent='📺 '+userName;
-const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openScreenInSeparateWindow(uniqueKey,userName,isSelf,peerId);
-const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleScreenFullscreen(uniqueKey);
-const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeScreenWindow(uniqueKey);
+const separateBtn=document.createElement('button');separateBtn.className='video-window-btn';separateBtn.innerHTML='↗';separateBtn.title='Открыть в отдельном окне';separateBtn.onclick=()=>openVideoInSeparateWindow(uniqueKey,userName,isSelf,peerId);
+const fullscreenBtn=document.createElement('button');fullscreenBtn.className='video-window-btn';fullscreenBtn.innerHTML='⛶';fullscreenBtn.onclick=()=>toggleVideoFullscreen(uniqueKey);
+const closeBtn=document.createElement('button');closeBtn.className='video-window-btn close';closeBtn.innerHTML='✕';closeBtn.onclick=()=>closeVideoWindow(uniqueKey);
 header.appendChild(title);header.appendChild(separateBtn);header.appendChild(fullscreenBtn);header.appendChild(closeBtn);
 const video=document.createElement('video');video.autoplay=true;video.playsInline=true;
 const resize=document.createElement('div');resize.className='video-window-resize';
