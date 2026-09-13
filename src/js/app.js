@@ -8,6 +8,9 @@ const bootMode=urlParams.get('mode');
 const bootNick=(urlParams.get('nick')||'').trim();
 const bootCode=(urlParams.get('code')||'').trim().toUpperCase();
 let techOpen=false,voteOpen=false;
+let prefsLock=true;
+function saveRoomPrefs(){if(myRole!=='admin'||prefsLock)return;try{localStorage.setItem('mp_room_prefs_'+myNickname,JSON.stringify({lanOpen:isLanOpen,voiceEnabled:voiceChatEnabled,voteCooldown:voteCooldown,voteDuration:voteDuration}));}catch(e){}}
+function applyRoomPrefs(){if(myRole!=='admin')return;try{const p=JSON.parse(localStorage.getItem('mp_room_prefs_'+myNickname)||'null');if(!p)return;if(p.lanOpen&&!isLanOpen)socket.emit('toggle-lan');if(p.voiceEnabled&&!voiceChatEnabled)socket.emit('toggle-voice-chat',true);if((p.voteCooldown!==undefined&&p.voteCooldown!==voteCooldown)||(p.voteDuration!==undefined&&p.voteDuration!==voteDuration))socket.emit('update-settings',{voteCooldown:p.voteCooldown!==undefined?p.voteCooldown:voteCooldown,voteDuration:p.voteDuration!==undefined?p.voteDuration:voteDuration});}catch(e){}}
 function toggleTechSettings(){techOpen=!techOpen;const b=document.getElementById('tech-settings-btn');const p=document.getElementById('tech-settings-panel');if(b)b.classList.toggle('open',techOpen);if(p)p.style.display=techOpen?'flex':'none';if(!techOpen){voteOpen=false;const vb=document.getElementById('vote-settings-btn');const vp=document.getElementById('admin-controls');if(vb)vb.classList.remove('open');if(vp)vp.style.display='none';}}
 function toggleVoteSettings(){if(myRole!=='admin')return;voteOpen=!voteOpen;const b=document.getElementById('vote-settings-btn');const p=document.getElementById('admin-controls');if(b)b.classList.toggle('open',voteOpen);if(p)p.style.display=voteOpen?'block':'none';}
 
@@ -17,7 +20,7 @@ if(bootMode==='create'&&bootNick){
 myNickname=bootNick;
 myNickname=bootNick;localStorage.setItem('mp_nickname',bootNick);
 socket.emit('create-room',bootNick,function(d){
-if(d&&d.code){history.replaceState(null,'','/room?mode=join&code='+d.code+'&nick='+encodeURIComponent(bootNick));enterRoom(d);}
+if(d&&d.code){history.replaceState(null,'','/room?mode=join&code='+d.code+'&nick='+encodeURIComponent(bootNick));enterRoom(d);applyRoomPrefs();}
 else{showAlert('⚠️',translate('leave_room_title'),translate('boot_error'));setTimeout(backToStart,1500);}
 });
 }else if(bootMode==='join'&&bootNick&&bootCode){
@@ -33,6 +36,7 @@ socket.on('connect',()=>{mySocketId=socket.id;if(!booted&&bootMode){booted=true;
 function enterRoom(d){
 myRole=d.role;currentRoomCode=d.code;voteCooldown=d.voteCooldown||0;voteDuration=d.voteDuration||15;voiceChatEnabled=d.voiceEnabled||false;
 isLanOpen=!!d.lanOpen;updateLanButton();
+prefsLock=true;setTimeout(()=>{prefsLock=false;},2000);
 document.getElementById('room-code-el').innerText=d.code;
 document.getElementById('sidebar').style.display='flex';
 document.getElementById('player-bar').style.display='grid';
@@ -64,7 +68,7 @@ setTimeout(backToStart,100);
 });
 }
 function toggleLan(){if(myRole!=='admin'){showToast(translate('lan_admin_only'),true);return;}socket.emit('toggle-lan');}
-socket.on('lan-update',o=>{isLanOpen=!!o;updateLanButton();});
+socket.on('lan-update',o=>{isLanOpen=!!o;updateLanButton();saveRoomPrefs();});
 function updateLanButton(){const b=document.getElementById('lan-toggle-btn');if(!b)return;b.style.display='flex';b.classList.toggle('active',isLanOpen);b.textContent=isLanOpen?translate('lan_on'):translate('lan_off');}
 function copyRoomCode(){if(!currentRoomCode)return;navigator.clipboard.writeText(currentRoomCode).then(()=>showToast(translate('copied')));}
 function regenerateCode(){if(myRole!=='admin')return;showConfirm('🔑',translate('confirm_regen_title'),translate('confirm_regen_msg'),()=>{socket.emit('regenerate-room-code');});}
@@ -73,7 +77,7 @@ socket.on('kicked',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingW
 socket.on('banned',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('🚫','Бан',translate('banned_msg'));setTimeout(backToStart,2000);});
 socket.on('room-closed',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('👋','Комната закрыта',translate('admin_left'));setTimeout(backToStart,2000);});
 socket.on('disconnect',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});if(currentRoomCode){showAlert('👋','Связь потеряна','Хост вышел из комнаты или сервер недоступен.');setTimeout(backToStart,2500);}});
-socket.on('voice-status',e=>{voiceChatEnabled=e;if(myRole==='admin')updateVoiceToggleButton();if(!e&&isInVoice)leaveVoiceChat();updateVoiceEntryButton();});
+socket.on('voice-status',e=>{voiceChatEnabled=e;if(myRole==='admin')updateVoiceToggleButton();if(!e&&isInVoice)leaveVoiceChat();updateVoiceEntryButton();saveRoomPrefs();});
 socket.on('voice-chat-disabled',()=>{if(isInVoice)leaveVoiceChat();voiceChatEnabled=false;updateVoiceEntryButton();});
 function toggleVoiceChatSetting(){if(myRole!=='admin')return;socket.emit('toggle-voice-chat',!voiceChatEnabled);}
 function updateVoiceToggleButton(){const b=document.getElementById('voice-chat-toggle');if(!b)return;b.className=voiceChatEnabled?'voice-toggle-btn on':'voice-toggle-btn off';b.innerText=voiceChatEnabled?translate('voice_on'):translate('voice_off');}
