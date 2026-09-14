@@ -1,6 +1,8 @@
 function volStore(){try{return JSON.parse(localStorage.getItem('mp_volumes')||'{}');}catch(e){return{};}}
-function volStoreSet(name,v){const s=volStore();s[name]=v;localStorage.setItem('mp_volumes',JSON.stringify(s));}
-function volByName(name){const s=volStore();return s[name];}
+function volStoreSet(key,v){const s=volStore();s[key]=v;localStorage.setItem('mp_volumes',JSON.stringify(s));}
+function volByKey(key){const s=volStore();return s[key];}
+function getUserVolKey(u){return u.clientIp||u.name;}
+function getUserVol(u){const k=getUserVolKey(u);const v=volByKey(k);if(v!==undefined)return v;return volByKey(u.name);}
 // ===== ГОЛОС, ВИДЕО, ЭКРАН =====
 function startSpeakingDetection(p,s){try{const c=getGlobalAudioContext();if(!c||s.getAudioTracks().length===0)return;const x=c.createMediaStreamSource(s);const g=c.createGain();g.gain.value=4.0;const a=c.createAnalyser();a.fftSize=256;a.smoothingTimeConstant=0.3;x.connect(g);g.connect(a);analysers[p]=a;gains[p]=g;}catch(e){}}
 function startSelfSpeakingDetection(s){try{const c=getGlobalAudioContext();if(!c)return;const x=c.createMediaStreamSource(s);const g=c.createGain();g.gain.value=4.0;const a=c.createAnalyser();a.fftSize=256;a.smoothingTimeConstant=0.3;x.connect(g);g.connect(a);myAnalyser=a;}catch(e){}}
@@ -69,7 +71,7 @@ currentCalls[c.peer]=c;
 c.on('stream',rs=>{
 const ctx=getGlobalAudioContext();const pid=c.peer;
 let sv=localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
-if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?volByName(u.name):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
+if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?getUserVol(u):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
 if(sv===undefined)sv=0.5;
 const ae=new Audio();ae.srcObject=rs;ae.volume=0;ae.muted=false;c._audioElement=ae;
 if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const s=ctx.createWaveShaper();s.curve=makeSoftClipCurve();s.oversample='4x';const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(s);s.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;c._shaperNode=s;}catch(e){}}
@@ -296,7 +298,7 @@ function toggleMic(){if(!myStream||forceMuted){if(forceMuted)showToast(translate
 function toggleDeafen(){if(forceDeafened){showToast(translate('force_deafened'),true);return;}isDeafened=!isDeafened;applyDeafenState();updateVoiceControlsInPlayer();syncSelfVoiceState();}
 function applyDeafenState(){const shouldBeDeafened=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(shouldBeDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=shouldBeDeafened;}});}
 socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){myStream.getAudioTracks()[0].enabled=!forceMuted&&!isMuted;}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(forceDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=forceDeafened||isDeafened;}});showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
-function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(u.name,val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
+function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(getUserVolKey(u),val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
 function onUserVolumeInput(sid,el,rng){let v=parseInt(el.value);if(isNaN(v)||v<0)v=0;if(v>200)v=200;el.value=v;const sv=v/200;if(rng)rng.value=sv;setLocalUserVolume(sid,sv);}
 function spinUserVolume(sid,delta,rng,inp){let v=parseInt(inp.value);if(isNaN(v))v=100;v+=delta;if(v<0)v=0;if(v>200)v=200;inp.value=v;onUserVolumeInput(sid,inp,rng);}
 socket.on('media-requested', async ({ requesterSocketId, requesterPeerId, type }) => {

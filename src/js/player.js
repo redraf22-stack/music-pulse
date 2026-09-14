@@ -19,7 +19,15 @@ let trackLoadedAt=0;
 let syncPlaying=false,syncStartedAt=null,syncCurrentTime=0;
 audio.addEventListener('error',()=>{if(trackChanging){trackChanging=false;showToast(translate('load_problem'),true);}});
 const searchAC=new CustomAutocomplete('search-input','ac-search-list','ac-search-wrapper','syncmusic_search_history');
-document.getElementById('search-input').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();if(searchAC.isOpen&&searchAC.selectedIndex>=0){this.value=searchAC.items[searchAC.selectedIndex];}searchAC.close();setTimeout(()=>{searchMusic();},10);}});
+const searchInputEl=document.getElementById('search-input');
+searchInputEl.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();if(searchAC.isOpen&&searchAC.selectedIndex>=0){this.value=searchAC.items[searchAC.selectedIndex];}searchAC.close();setTimeout(()=>{searchMusic();},10);}});
+searchInputEl.addEventListener('input',function(){
+if(!this.value.trim()){
+searchResults=[];localPages=0;
+const res=document.getElementById('results');if(res)res.innerHTML='';
+const pag=document.getElementById('pagination');if(pag)pag.style.display='none';
+}
+});
 function showReadyButton(){document.getElementById('player-bar').innerHTML=`<div style="width:100%;text-align:center;padding:10px;"><p style="color:var(--sub);margin-bottom:12px;font-size:14px;">${translate('autoplay_blocked')}</p><button class="primary" id="unlock-audio-btn" style="max-width:350px;margin:0 auto;">${escapeHtml(translate('click_to_enable'))}</button></div>`;document.getElementById('unlock-audio-btn').addEventListener('click',enableAudio);}
 function enableAudio(){const c=getGlobalAudioContext();if(c&&c.state==='suspended')c.resume();const b=(new(window.AudioContext||window.webkitAudioContext)());const s=b.createBuffer(1,1,22050);const src=b.createBufferSource();src.buffer=s;src.connect(b.destination);src.start(0);audio.src='data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';audio.play().then(()=>{isReady=true;audio.pause();audio.currentTime=0;applySpeakerToDevice();initMusicGainNode();restorePlayerBar();}).catch(()=>showAlert('⚠️','Ошибка',translate('no_browser_support')));}
 function initMusicGainNode(){if(musicGainNode)return true;try{const c=getGlobalAudioContext();if(!c)return false;if(c.state==='suspended')c.resume();const s=c.createMediaElementSource(audio);musicGainNode=c.createGain();musicGainNode.gain.value=volumeToGain(masterVolume);musicShaperNode=c.createWaveShaper();musicShaperNode.curve=makeSoftClipCurve();musicShaperNode.oversample='4x';s.connect(musicGainNode);musicGainNode.connect(musicShaperNode);musicShaperNode.connect(c.destination);musicAudioCtx=c;return true;}catch(e){return false;}}
@@ -181,6 +189,7 @@ else showToast(d.error||'Ошибка сохранения',true);
 // ===== ДОБАВЛЕНИЕ ФАЙЛОМ =====
 let pendingMusicId='';
 let pendingFtCover='';
+let pendingMusicFile=null;
 async function pickFtCover(e){
 const f=e.target.files[0];if(!f)return;
 const fd=new FormData();fd.append('file',f);
@@ -193,7 +202,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('#add-menu')&&!e.targ
 function openFileTrackModal(){closeAddMenu();pendingMusicId='';pendingFtCover='';document.getElementById('ft-file').value='';document.getElementById('ft-cover-input').value='';document.getElementById('ft-cover-preview').src='';document.getElementById('ft-auto-cover').checked=true;document.getElementById('ft-title').value='';document.getElementById('ft-artist').value='';document.getElementById('ft-album').value='';document.getElementById('ft-status').textContent='';const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 Выбрать файл…';pb.classList.remove('has');document.getElementById('file-track-modal').classList.add('open');}
 function closeFileTrackModal(){document.getElementById('file-track-modal').classList.remove('open');}
 async function pickMusicFile(e){
-const f=e.target.files[0];if(!f)return;
+const f=e.target.files[0];if(!f)return;pendingMusicFile=f;
 const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 '+f.name;pb.classList.add('has');
 document.getElementById('ft-status').textContent='⏳ Загружаю и читаю теги...';
 const fd=new FormData();fd.append('file',f);
@@ -206,12 +215,33 @@ else showToast(d.error||'Ошибка загрузки',true);
 async function confirmMusicFile(){
 if(!pendingMusicId){showToast('Сначала выбери файл',true);return;}
 const title=document.getElementById('ft-title').value.trim();if(!title){showToast('Укажи название',true);return;}
+const artist=document.getElementById('ft-artist').value.trim()||'Unknown Artist';
+const album=document.getElementById('ft-album').value.trim();
+const autoCover=document.getElementById('ft-auto-cover').checked;
+const isHost=window.electronAPI&&(window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1')&&myRole==='admin';
+if(isHost||!window.electronAPI||!window.electronAPI.saveMusicFile){
 try{
-const r=await fetch('/api/confirm-music',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pendingMusicId,title:title,artist:document.getElementById('ft-artist').value.trim()||'Unknown Artist',album:document.getElementById('ft-album').value.trim(),owner:myNickname,cover:document.getElementById('ft-auto-cover').checked?'':pendingFtCover})});
+const r=await fetch('/api/confirm-music',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pendingMusicId,title:title,artist:artist,album:album,owner:myNickname,cover:autoCover?'':pendingFtCover})});
 const d=await r.json();
-if(d.success){closeFileTrackModal();showToast('💾 Добавлено! Включи трек галочкой в настройках плейлиста.');socket.emit('tracks-changed');searchMusic(1);}
+if(d.success){closeFileTrackModal();pendingMusicFile=null;showToast('💾 Добавлено! Включи трек галочкой в настройках плейлиста.');socket.emit('tracks-changed');searchMusic(1);}
 else showToast(d.error||'Ошибка',true);
 }catch(e){showToast('Ошибка сохранения',true);}
+return;
+}
+// Гость — локальное сохранение + автошаринг
+try{
+if(!pendingMusicFile){showToast('Файл утерян, выбери заново',true);return;}
+const buf=await pendingMusicFile.arrayBuffer();
+let coverData='';
+if(!autoCover&&pendingFtCover){try{const r=await fetch(pendingFtCover);const b=await r.blob();coverData=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(b);});}catch(e){}}
+const safeName=(artist+' - '+title).replace(/[\\/:*?"<>|]/g,'_')+(/\.[a-z0-9]+$/i.test(pendingMusicFile.name)?pendingMusicFile.name.match(/\.[a-z0-9]+$/i)[0]:'.mp3');
+const s=await window.electronAPI.saveMusicFile({filename:safeName,data:Array.from(new Uint8Array(buf)),title:title,artist:artist,album:album,coverData:coverData});
+if(!s||!s.success){showToast(s&&s.error? s.error:'Ошибка сохранения',true);return;}
+closeFileTrackModal();pendingMusicFile=null;
+showToast('💾 Сохранено у тебя локально. Шарю в комнату...');
+await refreshMyShare();
+socket.emit('tracks-changed');searchMusic(1);
+}catch(e){showToast('Ошибка: '+e.message,true);}
 }
 // ===== МОЯ МУЗЫКА И РЕДАКТИРОВАНИЕ =====
 let editingTrack=null;

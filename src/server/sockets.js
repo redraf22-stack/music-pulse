@@ -12,7 +12,7 @@ module.exports = function (io, R, utils) {
         socket.on('create-room', (nickname, cb) => {
             const code = String(Math.floor(10000 + Math.random() * 90000));
             const name = nickname?.trim() || 'Аноним';
-            rooms[code] = { adminId: socket.id, lanOpen: false, adminDisconnectedAt: null, users: [{ id: socket.id, name, isAdmin: true, isMod: false, isVip: false }], queue: [], inbox: [], voteCooldown: 0, voteDuration: 15, activePoll: null, voiceEnabled: false, voiceStates: {}, randomMode: false, randomHistory: [], playHistory: [], bannedIps: [], chatMessages: [], state: { playing: false, currentTime: 0, trackUrl: null, trackName: null, trackArtist: null, trackCover: null, isLocal: false, isRepeat: false, startedAt: null, prevTrack: null } };
+            rooms[code] = { adminId: socket.id, lanOpen: false, adminDisconnectedAt: null, users: [{ id: socket.id, name, isAdmin: true, isMod: false, isVip: false }], queue: [], inbox: [], voteCooldown: 0, voteDuration: 15, activePoll: null, voiceEnabled: false, voiceStates: {}, randomMode: false, randomHistory: [], recentArtists: [], playHistory: [], bannedIps: [], chatMessages: [], state: { playing: false, currentTime: 0, trackUrl: null, trackName: null, trackArtist: null, trackCover: null, isLocal: false, isRepeat: false, startedAt: null, prevTrack: null } };
             rooms[code].playlists = PL.defaultPlaylists(name); rooms[code].activePlaylistId = 'classic';
             socket.join(code); socket.roomCode = code; socket.isAdmin = true; socket.isMod = false; socket.isVip = false; socket.nickname = name;
             R.broadcastUsers(code); R.broadcastQueue(code); R.broadcastInbox(code);
@@ -56,7 +56,13 @@ module.exports = function (io, R, utils) {
         socket.on('leave-room', () => {
             if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode];
             if (socket.isAdmin) { io.to(socket.roomCode).emit('room-closed'); delete rooms[socket.roomCode]; }
-            else { room.users = room.users.filter(u => u.id !== socket.id); delete room.voiceStates[socket.id]; socket.to(socket.roomCode).emit('user-left-voice', { id: socket.id, peerId: socket.peerId }); R.broadcastUsers(socket.roomCode); socket.leave(socket.roomCode); }
+            else {
+    if (socket.nickname && room.sharedMusic && room.sharedMusic[socket.nickname]) {
+        delete room.sharedMusic[socket.nickname];
+        io.to(socket.roomCode).emit('shared-music-update', { nick: socket.nickname, count: 0, removed: true });
+    }
+    room.users = room.users.filter(u => u.id !== socket.id); delete room.voiceStates[socket.id]; socket.to(socket.roomCode).emit('user-left-voice', { id: socket.id, peerId: socket.peerId }); R.broadcastUsers(socket.roomCode); socket.leave(socket.roomCode);
+}
             socket.roomCode = null;
         });
         socket.on('regenerate-room-code', () => {
@@ -190,7 +196,9 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
 });
         socket.on('send-chat-message', text => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const ct = String(text || '').trim().substring(0, 500); if (!ct) return; const msg = { id: Date.now().toString() + Math.random().toString(36).substr(2, 4), userId: socket.id, userName: socket.nickname || 'Аноним', isAdmin: !!socket.isAdmin, isMod: !!socket.isMod, isVip: !!socket.isVip, text: ct, timestamp: Date.now() }; room.chatMessages.push(msg); if (room.chatMessages.length > 200) room.chatMessages.shift(); io.to(socket.roomCode).emit('chat-message', msg); });
         socket.on('send-chat-media', data => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const { type, fileUrl, fileName, fileSize, text } = data || {}; if (!type || !fileUrl) return; const msg = { id: Date.now().toString() + Math.random().toString(36).substr(2, 4), userId: socket.id, userName: socket.nickname || 'Аноним', isAdmin: !!socket.isAdmin, isMod: !!socket.isMod, isVip: !!socket.isVip, text: String(text || '').trim().substring(0, 500), mediaType: type, fileUrl, fileName: fileName || 'file', fileSize: fileSize || 0, timestamp: Date.now() }; room.chatMessages.push(msg); if (room.chatMessages.length > 200) room.chatMessages.shift(); io.to(socket.roomCode).emit('chat-message', msg); });
-        socket.on('get-active-streams', () => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const as = []; room.users.forEach(u => { const s = io.sockets.sockets.get(u.id); if (room.voiceStates[u.id]?.videoEnabled) as.push({ type: 'video', userId: u.id, userName: u.name, peerId: s?.peerId || null, isAdmin: u.isAdmin, isMod: u.isMod, isVip: u.isVip, tabId: s?.tabId || 'unknown' }); if (room.voiceStates[u.id]?.screenEnabled) as.push({ type: 'screen', userId: u.id, userName: u.name, peerId: s?.peerId || null, isAdmin: u.isAdmin, isMod: u.isMod, isVip: u.isVip, tabId: s?.tabId || 'unknown' }); }); socket.emit('active-streams', as); });
+        socket.on('get-active-streams', () => { if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode]; const as = []; room.users.forEach(u => {
+    const s = io.sockets.sockets.get(u.id);
+    u.clientIp = s ? s.clientIp : null; if (room.voiceStates[u.id]?.videoEnabled) as.push({ type: 'video', userId: u.id, userName: u.name, peerId: s?.peerId || null, isAdmin: u.isAdmin, isMod: u.isMod, isVip: u.isVip, tabId: s?.tabId || 'unknown' }); if (room.voiceStates[u.id]?.screenEnabled) as.push({ type: 'screen', userId: u.id, userName: u.name, peerId: s?.peerId || null, isAdmin: u.isAdmin, isMod: u.isMod, isVip: u.isVip, tabId: s?.tabId || 'unknown' }); }); socket.emit('active-streams', as); });
         function broadcastPlaylists(code) { const r = rooms[code]; if (r) io.to(code).emit('playlists-update', { list: r.playlists, active: r.activePlaylistId }); }
         socket.on('switch-playlist', dir => {
             if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return;
@@ -284,6 +292,10 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
         });
         socket.on('disconnect', () => {
             if (!socket.roomCode || !rooms[socket.roomCode]) return; const room = rooms[socket.roomCode];
+                if (socket.nickname && room.sharedMusic && room.sharedMusic[socket.nickname]) {
+                delete room.sharedMusic[socket.nickname];
+                io.to(socket.roomCode).emit('shared-music-update', { nick: socket.nickname, count: 0, removed: true });
+            }
             delete room.voiceStates[socket.id];
             socket.to(socket.roomCode).emit('user-left-voice', { id: socket.id, peerId: socket.peerId });
             if (socket.isAdmin) room.adminDisconnectedAt = Date.now();

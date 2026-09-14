@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
+    saveMusicFile: (o) => ipcRenderer.invoke('save-music-file', o),
     closeFloatingWindows: (f) => ipcRenderer.invoke('close-floating-windows', f || {}),
     createFloatingWindow: (o) => ipcRenderer.invoke('create-floating-window', o),
     closeFloatingWindow: (id) => ipcRenderer.invoke('close-floating-window', id),

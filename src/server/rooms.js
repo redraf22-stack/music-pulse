@@ -14,17 +14,34 @@ module.exports = function (io, utils) {
     }
     function hasRandomInQueue(r) { return r.queue.some(t => (t.suggestedBy || '').includes('Рандом')); }
     async function getRandomTrackForRoom(code) {
-        const room = rooms[code]; if (!room) return null;
-       const all = await PL.resolveTracks(room, true);
-       if (!all.length) return null;
-      let hist = room.randomHistory || [];
-      let avail = all.filter(t => !hist.includes(t.key));
-      if (!avail.length) { avail = all; room.randomHistory = []; }
-     const t = avail[Math.floor(Math.random() * avail.length)];
-     room.randomHistory.push(t.key);
-     if (room.randomHistory.length > Math.max(1, Math.floor(all.length * 0.8))) room.randomHistory.shift();
-      return utils.normalizeTrack(t);
+    const room = rooms[code]; if (!room) return null;
+    const all = await PL.resolveTracks(room, true);
+    if (!all.length) return null;
+    let hist = room.randomHistory || [];
+    let recentArtists = room.recentArtists || [];
+    // Фильтруем по истории
+    let avail = all.filter(t => !hist.includes(t.key));
+    if (avail.length) {
+        // Фильтруем по недавним исполнителям (anti-repeat)
+        const artistFiltered = avail.filter(t => {
+            const artist = utils.normalizeStr((t.artist && t.artist.name) || t.artist || '');
+            return !recentArtists.includes(artist);
+        });
+        if (artistFiltered.length) avail = artistFiltered;
     }
+    // Если ничего не осталось — сбрасываем историю
+    if (!avail.length) { avail = all; room.randomHistory = []; }
+    const t = avail[Math.floor(Math.random() * avail.length)];
+    room.randomHistory.push(t.key);
+    if (room.randomHistory.length > Math.max(1, Math.floor(all.length * 0.8))) room.randomHistory.shift();
+    // Обновляем список недавних исполнителей
+    const currentArtist = utils.normalizeStr((t.artist && t.artist.name) || t.artist || '');
+    if (!room.recentArtists) room.recentArtists = [];
+    room.recentArtists.push(currentArtist);
+    const maxRecent = Math.min(5, Math.max(2, Math.floor(all.length * 0.3)));
+    if (room.recentArtists.length > maxRecent) room.recentArtists.shift();
+    return utils.normalizeTrack(t);
+}
     async function addRandomToQueueEnd(room) {
         try {
             const code = Object.keys(rooms).find(k => rooms[k] === room); if (!code) return;

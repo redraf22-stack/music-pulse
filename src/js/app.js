@@ -51,7 +51,7 @@ isReady=true;restorePlayerBar();
 }
 else{document.getElementById('admin-controls').style.display='none';if(window.electronAPI){isReady=true;restorePlayerBar();}else{showReadyButton();}startCooldownTimer();}
 updateVoiceEntryButton();updateManageBtnVisibility();updateRegenBtnVisibility();updateRandomButtonVisibility();
-if(typeof applySpeakerToDevice==='function'){applySpeakerToDevice().then(r=>{if(r&&r.ok&&!r.silent)console.log('[speaker] applied on enter',r);}).catch(()=>{});}
+const sv=localStorage.getItem('mp_master_volume');if(sv!==null&&typeof audio!=='undefined'){audio.volume=parseFloat(sv);}
 socket.emit('get-active-streams');
 socket.emit('get-playlists');
 renderPlaylistBar();
@@ -181,7 +181,16 @@ showToast('📤 Музыка в комнате: '+list.length+' треков');
 }catch(e){showToast('📤 Ошибка загрузки: '+e.message,true);}
 });
 });
-socket.on('shared-music-update',d=>{if(document.getElementById('playlist-modal').classList.contains('open')&&plCurrentNick===d.nick){loadPlTracks(d.nick);}});
+socket.on('shared-music-update',d=>{
+if(d.removed){
+if(document.getElementById('playlist-modal').classList.contains('open')){closePlaylistSettings();setTimeout(()=>openPlaylistSettings(),100);}
+if(document.getElementById('playlist-view-modal').classList.contains('open')){closePlaylistView();setTimeout(()=>openPlaylistView(),100);}
+socket.emit('get-playlists');
+showToast('📤 '+escapeHtml(d.nick)+' вышел — его треки убраны из плейлистов');
+return;
+}
+if(document.getElementById('playlist-modal').classList.contains('open')&&plCurrentNick===d.nick){loadPlTracks(d.nick);}
+});
 socket.on('playlists-update',d=>{roomPlaylists=d.list||[];activePlaylistId=d.active||'classic';if(!roomPlaylists.find(p=>p.id===viewPlaylistId))viewPlaylistId=activePlaylistId;renderPlaylistBar();});
 socket.on('playlist-open-settings',id=>setTimeout(()=>openPlaylistSettings(id),150));
 function renderPlaylistBar(){
@@ -335,4 +344,19 @@ if(r&&r.ok&&!r.silent){showToast('🔊 Вывод звука переключе�
 else{showToast('💾 Сохранено');}
 });
 closeRoomDeviceSettings();
+}
+async function refreshMyShare(){
+if(!(window.electronAPI&&window.electronAPI.startMusicShare))return false;
+try{
+const s=await window.electronAPI.startMusicShare();
+if(s&&s.ok){
+const ip=await window.electronAPI.getLanIp();
+const r=await fetch('http://localhost:'+s.port+'/list.json');
+const list=await r.json();
+socket.emit('share-music',{base:'http://'+ip+':'+s.port,tracks:list});
+window.iSharedMusic=true;
+return true;
+}
+}catch(e){}
+return false;
 }

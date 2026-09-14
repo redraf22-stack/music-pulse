@@ -295,6 +295,32 @@ ipcMain.handle('set-music-dir', (event, dir) => {
         return { success: true };
     } catch (e) { return { success: false }; }
 });
+ipcMain.handle('save-music-file', async (event, { filename, data, title, artist, coverData }) => {
+    try {
+        const dir = readMusicDir() || path.join(app.getPath('userData'), 'music');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const safe = String(filename).replace(/[\\/:*?"<>|]/g, '_');
+        fs.writeFileSync(path.join(dir, safe), Buffer.from(data));
+        const ovrPath = path.join(app.getPath('userData'), 'music-overrides.json');
+        let ovr = {}; try { ovr = JSON.parse(fs.readFileSync(ovrPath, 'utf8')); } catch (e) {}
+        const o = ovr[safe] || {};
+        if (title) o.title = title;
+        if (artist) o.artist = artist;
+        if (coverData) {
+            const cdir = path.join(app.getPath('userData'), 'covers');
+            if (!fs.existsSync(cdir)) fs.mkdirSync(cdir, { recursive: true });
+            const m = String(coverData).match(/^data:(image\/\w+);base64,(.+)$/);
+            if (m) {
+                const cname = 'ovr-' + Date.now() + (m[1] === 'image/png' ? '.png' : '.jpg');
+                fs.writeFileSync(path.join(cdir, cname), Buffer.from(m[2], 'base64'));
+                o.cover = '/covers/' + cname;
+            }
+        }
+        ovr[safe] = o;
+        fs.writeFileSync(ovrPath, JSON.stringify(ovr, null, 2));
+        return { success: true, filename: safe };
+    } catch (e) { return { success: false, error: e.message }; }
+});
 ipcMain.handle('get-device-settings', () => {
     const s = readMusicSettings();
     return {
