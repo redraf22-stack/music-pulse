@@ -37,7 +37,8 @@ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showToast(tran
 const c=getGlobalAudioContext();if(c&&c.state==='suspended')await c.resume();
 const eb=document.getElementById('voice-entry-btn');eb.innerHTML=translate('connecting');eb.disabled=true;
 try{
-const co={audio:selectedMicId?{deviceId:{exact:selectedMicId}}:true,video:false};
+let micId=selectedMicId;try{if(typeof resolveDeviceId==='function')micId=await resolveDeviceId('audioinput',selectedMicId);}catch(e){}
+const co={audio:Object.assign({echoCancellation:false,noiseSuppression:false,autoGainControl:false},micId?{deviceId:{exact:micId}}:{}),video:false};
 myStream=await navigator.mediaDevices.getUserMedia(co);
 startSelfSpeakingDetection(myStream);
 if(!peer){
@@ -340,3 +341,9 @@ if(info.userId)ensurePeer().then(()=>socket.emit('request-media',{userId:info.us
 updateMediaUsersList();
 });
 }
+document.addEventListener('keydown',e=>{
+if(e.key==='Escape'){
+Object.keys(videoWindows).forEach(k=>{const w=videoWindows[k];if(w&&w.classList.contains('fullscreen'))toggleVideoFullscreen(k);});
+Object.keys(screenWindows).forEach(k=>{const w=screenWindows[k];if(w&&w.classList.contains('fullscreen'))toggleScreenFullscreen(k);});
+}
+});

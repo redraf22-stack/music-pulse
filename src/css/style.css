@@ -326,7 +326,7 @@ input[type="number"]{-moz-appearance:textfield;-webkit-appearance:none;appearanc
 .media-viewer-close:hover{background:var(--danger);}
 .media-viewer-download:hover{background:var(--accent);color:black;}
 .video-window{position:fixed;background:#000;border:2px solid var(--border);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.8);display:flex;flex-direction:column;z-index:10000;overflow:hidden;min-width:240px;min-height:180px;}
-.video-window.fullscreen{top:0!important;left:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;border-radius:0;border:none;z-index:10001;}
+.video-window.fullscreen{top:32px!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;height:auto!important;border-radius:0;border:none;z-index:10001;}
 .video-window-header{background:rgba(0,0,0,0.8);padding:6px 10px;display:flex;align-items:center;gap:8px;cursor:move;user-select:none;}
 .video-window-title{flex:1;font-size:12px;font-weight:500;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .video-window-btn{background:none;border:none;color:white;font-size:14px;cursor:pointer;padding:2px 6px;border-radius:3px;transition:all 0.15s;line-height:1;opacity:0.7;}
@@ -467,8 +467,6 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:5px;top:
 .sidebar-header{-webkit-app-region:drag;}
 .sidebar-header button,.sidebar-header .room-code-display{-webkit-app-region:no-drag;}
 .playlist-bar button{-webkit-app-region:no-drag;}
-.chat-header{-webkit-app-region:drag;}
-.chat-header button{-webkit-app-region:no-drag;}
 /* Контент ниже тёмного титулбара */
 body{padding-top:32px !important;}
 .chat-fab{top:42px !important;}

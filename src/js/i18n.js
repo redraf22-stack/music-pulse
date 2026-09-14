@@ -187,3 +187,30 @@ m.addedNodes.forEach(n=>{if(n.nodeType===1)translateAll(n);else if(n.nodeType===
 const _origSetLanguage=setLanguage;
 setLanguage=function(l){autoMap=null;_origSetLanguage(l);setTimeout(()=>translateAll(document.body),50);};
 translateAll(document.body);
+// ===== Обратный перевод EN->RU без перезахода =====
+(function(){
+const REV={};
+function buildRev(){
+for(const k in AUTO_EXTRA){REV[AUTO_EXTRA[k]]=k;}
+try{
+const ru=translations['ru']||{},en=translations['en']||{};
+for(const k in en){if(ru[k])REV[en[k]]=ru[k];}
+}catch(e){}
+}
+const origSet=window.setLanguage;
+window.setLanguage=function(lang){
+origSet(lang);
+if(lang==='ru'){
+buildRev();
+const walk=(node)=>{
+node.childNodes.forEach(ch=>{
+if(ch.nodeType===3){
+const t=ch.textContent.trim();
+if(t&&REV[t]&&t!==REV[t])ch.textContent=ch.textContent.replace(t,REV[t]);
+}else if(ch.nodeType===1){walk(ch);}
+});
+};
+walk(document.body);
+}
+};
+})();
