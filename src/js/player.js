@@ -29,8 +29,7 @@ const pag=document.getElementById('pagination');if(pag)pag.style.display='none';
 }
 });
 function showReadyButton(){document.getElementById('player-bar').innerHTML=`<div style="width:100%;text-align:center;padding:10px;"><p style="color:var(--sub);margin-bottom:12px;font-size:14px;">${translate('autoplay_blocked')}</p><button class="primary" id="unlock-audio-btn" style="max-width:350px;margin:0 auto;">${escapeHtml(translate('click_to_enable'))}</button></div>`;document.getElementById('unlock-audio-btn').addEventListener('click',enableAudio);}
-function enableAudio(){const c=getGlobalAudioContext();if(c&&c.state==='suspended')c.resume();const b=(new(window.AudioContext||window.webkitAudioContext)());const s=b.createBuffer(1,1,22050);const src=b.createBufferSource();src.buffer=s;src.connect(b.destination);src.start(0);audio.src='data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';audio.play().then(()=>{isReady=true;audio.pause();audio.currentTime=0;applySpeakerToDevice();initMusicGainNode();restorePlayerBar();}).catch(()=>showAlert('⚠️','Ошибка',translate('no_browser_support')));}
-function initMusicGainNode(){if(musicGainNode)return true;try{const c=getGlobalAudioContext();if(!c)return false;if(c.state==='suspended')c.resume();const s=c.createMediaElementSource(audio);musicGainNode=c.createGain();musicGainNode.gain.value=volumeToGain(masterVolume);musicShaperNode=c.createWaveShaper();musicShaperNode.curve=makeSoftClipCurve();musicShaperNode.oversample='4x';s.connect(musicGainNode);musicGainNode.connect(musicShaperNode);musicShaperNode.connect(c.destination);musicAudioCtx=c;return true;}catch(e){return false;}}
+function enableAudio(){const c=getGlobalAudioContext();if(c&&c.state==='suspended')c.resume();audio.src='data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';audio.play().then(()=>{isReady=true;audio.pause();audio.currentTime=0;applySpeakerToDevice();initMusicGainNode();restorePlayerBar();}).catch(()=>showAlert('⚠️','Ошибка',translate('no_browser_support')));}function initMusicGainNode(){if(musicGainNode)return true;try{const c=getGlobalAudioContext();if(!c)return false;if(c.state==='suspended')c.resume();const s=c.createMediaElementSource(audio);musicGainNode=c.createGain();musicGainNode.gain.value=volumeToGain(masterVolume);musicShaperNode=c.createWaveShaper();musicShaperNode.curve=makeSoftClipCurve();musicShaperNode.oversample='4x';s.connect(musicGainNode);musicGainNode.connect(musicShaperNode);musicShaperNode.connect(c.destination);musicAudioCtx=c;return true;}catch(e){return false;}}
 function setMasterVolume(v){masterVolume=parseFloat(v);localStorage.setItem('mp_master_volume',String(masterVolume));if(musicGainNode&&musicAudioCtx)musicGainNode.gain.setTargetAtTime(volumeToGain(v),musicAudioCtx.currentTime,0.015);else audio.volume=Math.min(1,volumeToGain(v));}
 function restorePlayerBar(){
 const bar=document.getElementById('player-bar');const cc=myRole==='admin'||isMod;const sc=cc?'progress-bar can-seek':'progress-bar';const ra=isRepeat?'active':'';const pv=Math.round(masterVolume*200);
@@ -240,6 +239,21 @@ if(!s||!s.success){showToast(s&&s.error? s.error:'Ошибка сохранен�
 closeFileTrackModal();pendingMusicFile=null;
 showToast('💾 Сохранено у тебя локально. Шарю в комнату...');
 await refreshMyShare();
+// Принудительное обновление треков с retry
+let retryCount = 0;
+const maxRetries = 3;
+const updateTracks = async () => {
+    try {
+        socket.emit('tracks-changed');
+        await new Promise(r => setTimeout(r, 500));
+        searchMusic(1);
+    } catch (e) {
+        if (retryCount++ < maxRetries) {
+            setTimeout(updateTracks, 1000);
+        }
+    }
+};
+updateTracks();
 socket.emit('tracks-changed');searchMusic(1);
 }catch(e){showToast('Ошибка: '+e.message,true);}
 }

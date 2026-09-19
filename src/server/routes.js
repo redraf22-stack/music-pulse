@@ -356,13 +356,37 @@ app.post('/api/delete-track', require('express').json(), async (req, res) => {
         } else if (type === 'local') {
             const dir = require('./config.js').getCustomMusicDir();
             const full = path.resolve(path.join(dir, id));
-            if (!full.startsWith(path.resolve(dir) + path.sep) || !fs.existsSync(full)) return res.status(404).json({ error: 'Файл не найден' });
-            fs.unlinkSync(full);
+            if (!full.startsWith(path.resolve(dir) + path.sep)) return res.status(403).json({ error: 'Недопустимый путь' });
+            if (!fs.existsSync(full)) return res.status(404).json({ error: 'Файл не найден' });
+            try {
+                fs.unlinkSync(full);
+            } catch (e) {
+                if (e.code === 'EBUSY' || e.code === 'EPERM') {
+                    return res.status(409).json({ error: 'Файл используется, закрой плеер и повтори' });
+                }
+                throw e;
+            }
             try { utils.getLocalTracks(true); } catch (e) {}
             try { require('./playlists.js').removeOverride(id); } catch (e) {}
-        } else return res.status(400).json({ error: 'Неизвестный тип' });
+        } else if (type === 'shared') {
+            // Шаринг нельзя удалить — он принадлежит другому пользователю
+            return res.status(403).json({ error: 'Нельзя удалить чужую музыку' });
+        } else {
+            return res.status(400).json({ error: 'Неизвестный тип' });
+        }
+        
+        // Принудительно уведомляем всех клиентов об обновлении
+        if (ROOMS) {
+            Object.keys(ROOMS).forEach(code => {
+                io.to(code).emit('tracks-refresh');
+            });
+        }
+        
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Ошибка удаления' }); }
+    } catch (e) {
+        console.error('[delete-track]', e);
+        res.status(500).json({ error: 'Ошибка удаления: ' + e.message });
+    }
 });
 
     app.get('/api/music-dir', (req, res) => { res.json({ dir: require('./config.js').getCustomMusicDir() }); });

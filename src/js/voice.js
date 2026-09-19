@@ -1,13 +1,89 @@
+// Глобальный аудит аудио-ресурсов
+window.audioResources = {
+    contexts: new Set(),
+    streams: new Set(),
+    peers: new Set()
+};
+
+const originalAudioContext = window.AudioContext || window.webkitAudioContext;
+window.AudioContext = window.webkitAudioContext = function(...args) {
+    const ctx = new originalAudioContext(...args);
+    window.audioResources.contexts.add(ctx);
+    const origClose = ctx.close.bind(ctx);
+    ctx.close = function() {
+        window.audioResources.contexts.delete(ctx);
+        return origClose();
+    };
+    return ctx;
+};
+
+function cleanupAudioResources() {
+    try {
+        window.audioResources.contexts.forEach(ctx => {
+            if (ctx.state !== 'closed') {
+                try { ctx.close(); } catch (e) {}
+            }
+        });
+        window.audioResources.contexts.clear();
+        
+        window.audioResources.streams.forEach(stream => {
+            try {
+                stream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
+            } catch (e) {}
+        });
+        window.audioResources.streams.clear();
+        
+        window.audioResources.peers.forEach(peer => {
+            try { peer.destroy(); } catch (e) {}
+        });
+        window.audioResources.peers.clear();
+    } catch (e) { console.error('[cleanup]', e); }
+}
+
+window.addEventListener('beforeunload', cleanupAudioResources);
+window.addEventListener('unload', cleanupAudioResources);
 function volStore(){try{return JSON.parse(localStorage.getItem('mp_volumes')||'{}');}catch(e){return{};}}
-function volStoreSet(key,v){const s=volStore();s[key]=v;localStorage.setItem('mp_volumes',JSON.stringify(s));}
-function volByKey(key){const s=volStore();return s[key];}
+function volStoreSet(key, v) {
+    try {
+        const s = volStore();
+        s[key] = v;
+        const data = JSON.stringify(s);
+        localStorage.setItem('mp_volumes', data);
+        localStorage.setItem('mp_volumes_backup', data);
+    } catch (e) {
+        console.error('[volStoreSet]', e);
+        try {
+            const backup = localStorage.getItem('mp_volumes_backup');
+            if (backup) localStorage.setItem('mp_volumes', backup);
+        } catch (e2) {}
+    }
+}
+function volStore() {
+    try {
+        const data = localStorage.getItem('mp_volumes');
+        if (data) return JSON.parse(data);
+        const backup = localStorage.getItem('mp_volumes_backup');
+        if (backup) {
+            localStorage.setItem('mp_volumes', backup);
+            return JSON.parse(backup);
+        }
+        return {};
+    } catch (e) {
+        console.error('[volStore]', e);
+        try {
+            const backup = localStorage.getItem('mp_volumes_backup');
+            if (backup) return JSON.parse(backup);
+        } catch (e2) {}
+        return {};
+    }
+}
 function getUserVolKey(u){return u.clientIp||u.name;}
 function getUserVol(u){const k=getUserVolKey(u);const v=volByKey(k);if(v!==undefined)return v;return volByKey(u.name);}
 // ===== ГОЛОС, ВИДЕО, ЭКРАН =====
 function startSpeakingDetection(p,s){try{const c=getGlobalAudioContext();if(!c||s.getAudioTracks().length===0)return;const x=c.createMediaStreamSource(s);const g=c.createGain();g.gain.value=4.0;const a=c.createAnalyser();a.fftSize=256;a.smoothingTimeConstant=0.3;x.connect(g);g.connect(a);analysers[p]=a;gains[p]=g;}catch(e){}}
 function startSelfSpeakingDetection(s){try{const c=getGlobalAudioContext();if(!c)return;const x=c.createMediaStreamSource(s);const g=c.createGain();g.gain.value=4.0;const a=c.createAnalyser();a.fftSize=256;a.smoothingTimeConstant=0.3;x.connect(g);g.connect(a);myAnalyser=a;}catch(e){}}
 function stopSelfSpeakingDetection(){myAnalyser=null;if(mySocketId)speakingUsers.delete(mySocketId);}
-function stopSpeakingDetection(p){try{if(gains[p]){gains[p].disconnect();delete gains[p];}}catch(e){}delete analysers[p];speakingUsers.delete(p);}
+function stopSpeakingDetection(p){try{if(gains[p]){gains[p].disconnect();delete gains[p];}}catch(e){}try{if(analysers[p]){analysers[p].disconnect&&analysers[p].disconnect();delete analysers[p];}}catch(e){}speakingUsers.delete(p);}
 setInterval(()=>{let ch=false;if(myAnalyser&&mySocketId){const d=new Uint8Array(myAnalyser.frequencyBinCount);myAnalyser.getByteFrequencyData(d);let s=0;for(let i=0;i<d.length;i++)s+=d[i];const w=speakingUsers.has(mySocketId),n=(s/d.length)>8;if(w!==n){if(n)speakingUsers.add(mySocketId);else speakingUsers.delete(mySocketId);ch=true;}}Object.keys(analysers).forEach(p=>{const a=analysers[p];if(!a)return;const sid=peerToSocket[p];if(!sid)return;const d=new Uint8Array(a.frequencyBinCount);a.getByteFrequencyData(d);let s=0;for(let i=0;i<d.length;i++)s+=d[i];const w=speakingUsers.has(sid),n=(s/d.length)>8;if(w!==n){if(n)speakingUsers.add(sid);else speakingUsers.delete(sid);ch=true;}});if(ch)renderSpeakingDots();},100);
 function renderSpeakingDots(){document.querySelectorAll('.voice-dot').forEach(d=>d.classList.remove('speaking'));speakingUsers.forEach(s=>{const d=document.getElementById('vdot-'+s);if(d)d.classList.add('speaking');});}
 function ensurePeer(){
@@ -43,6 +119,15 @@ let micId=selectedMicId;try{if(typeof resolveDeviceId==='function')micId=await r
 const co={audio:Object.assign({echoCancellation:false,noiseSuppression:false,autoGainControl:false},micId?{deviceId:{exact:micId}}:{}),video:false};
 myStream=await navigator.mediaDevices.getUserMedia(co);
 startSelfSpeakingDetection(myStream);
+// Мониторинг трека микрофона
+const audioTrack=myStream.getAudioTracks()[0];
+if(audioTrack){
+audioTrack.onended=()=>{
+if(isInVoice&&!isLeaving){
+showToast('⚠️ Микрофон отключён системой. Перезайди в войс.',true);
+}
+};
+}
 if(!peer){
 peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});
 peer.on('call',handleIncomingCall);
@@ -74,10 +159,10 @@ let sv=localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
 if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?getUserVol(u):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
 if(sv===undefined)sv=0.5;
 const ae=new Audio();ae.srcObject=rs;ae.volume=0;ae.muted=false;c._audioElement=ae;
-if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const s=ctx.createWaveShaper();s.curve=makeSoftClipCurve();s.oversample='4x';const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(s);s.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;c._shaperNode=s;}catch(e){}}
+if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;}catch(e){}}
 ae.play().catch(()=>{});startSpeakingDetection(pid,rs);
 });
-c.on('close',()=>{const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();if(x._shaperNode)x._shaperNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
+c.on('close',()=>{const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
 }
 function handleVideoCall(call){
 const peerId=call.peer;
@@ -296,7 +381,7 @@ document.addEventListener('mouseup',()=>{isResizing=false;});
 }
 function toggleMic(){if(!myStream||forceMuted){if(forceMuted)showToast(translate('force_muted'),true);return;}isMuted=!isMuted;myStream.getAudioTracks()[0].enabled=!isMuted;updateVoiceControlsInPlayer();syncSelfVoiceState();}
 function toggleDeafen(){if(forceDeafened){showToast(translate('force_deafened'),true);return;}isDeafened=!isDeafened;applyDeafenState();updateVoiceControlsInPlayer();syncSelfVoiceState();}
-function applyDeafenState(){const shouldBeDeafened=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(shouldBeDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=shouldBeDeafened;}});}
+function applyDeafenState(){const shouldBeDeafened=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._audioElement)c._audioElement.muted=shouldBeDeafened;});}
 socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){myStream.getAudioTracks()[0].enabled=!forceMuted&&!isMuted;}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(forceDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=forceDeafened||isDeafened;}});showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
 function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(getUserVolKey(u),val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
 function onUserVolumeInput(sid,el,rng){let v=parseInt(el.value);if(isNaN(v)||v<0)v=0;if(v>200)v=200;el.value=v;const sv=v/200;if(rng)rng.value=sv;setLocalUserVolume(sid,sv);}
@@ -343,6 +428,26 @@ if(info.userId)ensurePeer().then(()=>socket.emit('request-media',{userId:info.us
 updateMediaUsersList();
 });
 }
+// Периодическая проверка здоровья войса
+// Периодическая проверка здоровья войса + принудительная очистка мусора
+setInterval(() => {
+    if (isInVoice && myStream) {
+        const tracks = myStream.getAudioTracks();
+        if (!tracks.length || !tracks[0].enabled) {
+            console.warn('[voice] Track lost, reconnecting...');
+            leaveVoiceChat().then(() => setTimeout(() => toggleVoiceConnection(), 500));
+        }
+    }
+    
+    // Принудительная очистка "мёртвых" AudioContext
+    if (window.audioResources) {
+        window.audioResources.contexts.forEach(ctx => {
+            if (ctx.state === 'closed' || ctx.state === 'failed') {
+                window.audioResources.contexts.delete(ctx);
+            }
+        });
+    }
+}, 30000);
 document.addEventListener('keydown',e=>{
 if(e.key==='Escape'){
 Object.keys(videoWindows).forEach(k=>{const w=videoWindows[k];if(w&&w.classList.contains('fullscreen'))toggleVideoFullscreen(k);});
