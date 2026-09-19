@@ -1,6 +1,6 @@
 {
   "name": "musicpulse",
-  "version": "1.9.6",
+  "version": "1.9.7",
   "description": "MusicPulse - совместное прослушивание музыки в локальной сети",
   "main": "electron/main.js",
   "scripts": {

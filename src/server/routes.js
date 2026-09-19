@@ -45,8 +45,8 @@ module.exports = function (app, utils) {
 
     const storage = multer.diskStorage({ destination: (r, f, cb) => cb(null, uploadsDir), filename: (r, f, cb) => cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(f.originalname)) });
     const upload = multer({ storage, limits: { fileSize: 1024 * 1024 * 1024 } });
-    const searchLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50 });
-    const localLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
+    const searchLimiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
+    const localLimiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
     const uploadLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 20 });
 
     app.get('/api/local-tracks', localLimiter, async (req, res) => {
@@ -373,13 +373,6 @@ app.post('/api/delete-track', require('express').json(), async (req, res) => {
             return res.status(403).json({ error: 'Нельзя удалить чужую музыку' });
         } else {
             return res.status(400).json({ error: 'Неизвестный тип' });
-        }
-        
-        // Принудительно уведомляем всех клиентов об обновлении
-        if (ROOMS) {
-            Object.keys(ROOMS).forEach(code => {
-                io.to(code).emit('tracks-refresh');
-            });
         }
         
         res.json({ success: true });

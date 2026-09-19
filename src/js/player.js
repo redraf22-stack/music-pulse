@@ -96,6 +96,19 @@ if(st.trackName!==undefined){if(st.trackName&&st.trackUrl){np.style.display='fle
 const pr=st.prevTrack;
 if(pr&&(pr.trackName||pr.title)){pt.style.display='flex';document.getElementById('qpt-title').textContent=pr.trackName||pr.title||'—';let pa='';if(pr.trackArtist&&typeof pr.trackArtist==='object')pa=pr.trackArtist.name||'';else if(pr.artist&&typeof pr.artist==='object')pa=pr.artist.name||'';else pa=pr.trackArtist||pr.artist||'?';document.getElementById('qpt-artist').textContent=pa;const pc=document.getElementById('qpt-cover');const cu=pr.trackCover||pr.cover||'';if(cu){pc.src=cu;pc.style.display='block';}else pc.style.display='none';}else pt.style.display='none';
 }
+async function fetchJson(url,tries){
+tries=tries||2;
+for(let i=0;i<tries;i++){
+try{
+const res=await fetch(url);
+if(res.status===429){await new Promise(r=>setTimeout(r,1200));continue;}
+if(!res.ok)throw new Error('http '+res.status);
+const txt=await res.text();
+return JSON.parse(txt);
+}catch(e){if(i===tries-1)throw e;await new Promise(r=>setTimeout(r,800));}
+}
+throw new Error('fetch failed');
+}
 async function searchMusic(page=1){
 const el=document.getElementById('search-input');const query=el.value.trim();if(!query)return;searchAC.addToHistory(query);
 const btn=document.querySelector('#search-panel input[type="text"]');const origPh=btn.placeholder;btn.disabled=true;
@@ -103,9 +116,9 @@ const pagDiv=document.getElementById('pagination');const localTags=['#скача
 for(const tag of localTags){if(lowerQuery.startsWith(tag)){matchedTag=tag;break;}}
 try{
 if(matchedTag){isLocalSearch=true;localPage=page;localFilter=query.substring(matchedTag.length).trim();const params=new URLSearchParams({page:String(page)});if(myNickname)params.set('owner',myNickname);if(currentRoomCode)params.set('room',currentRoomCode);
-if(localFilter)params.set('filter',localFilter);const res=await fetch(`/api/local-tracks?${params}`);const data=await res.json();searchResults=data.data||[];localPages=data.pages||0;if(!searchResults.length){document.getElementById('results').innerHTML=localFilter?`<div style="padding:20px;color:var(--sub)">${translate('nothing_found_filter',{filter:escapeHtml(localFilter)})}</div>`:`<div style="padding:20px;color:var(--sub)">${escapeHtml(translate('no_local_tracks'))}</div>`;pagDiv.style.display='none';return;}renderSearchResults();renderPagination(data.page,data.pages);}
+if(localFilter)params.set('filter',localFilter);const data=await fetchJson(`/api/local-tracks?${params}`);searchResults=data.data||[];localPages=data.pages||0;if(!searchResults.length){document.getElementById('results').innerHTML=localFilter?`<div style="padding:20px;color:var(--sub)">${translate('nothing_found_filter',{filter:escapeHtml(localFilter)})}</div>`:`<div style="padding:20px;color:var(--sub)">${escapeHtml(translate('no_local_tracks'))}</div>`;pagDiv.style.display='none';return;}renderSearchResults();renderPagination(data.page,data.pages);}
 else{isLocalSearch=false;localPage=1;localFilter='';const params=new URLSearchParams({q:query,page:String(page)});if(myNickname)params.set('owner',myNickname);if(currentRoomCode)params.set('room',currentRoomCode);
-const res=await fetch(`/api/search?${params}`);const data=await res.json();if(!data.data?.length){document.getElementById('results').innerHTML=`<div style="padding:20px;color:var(--sub)">${escapeHtml(translate('nothing_found'))}</div>`;searchResults=[];pagDiv.style.display='none';return;}searchResults=data.data;renderSearchResults();renderPagination(data.page,data.pages);}
+const data=await fetchJson(`/api/search?${params}`);if(!data.data?.length){document.getElementById('results').innerHTML=`<div style="padding:20px;color:var(--sub)">${escapeHtml(translate('nothing_found'))}</div>`;searchResults=[];pagDiv.style.display='none';return;}searchResults=data.data;renderSearchResults();renderPagination(data.page,data.pages);}
 }catch(e){console.error(e);showToast(translate('search_error'),true);}finally{btn.disabled=false;btn.placeholder=origPh;}
 }
 function renderPagination(currentPage,totalPages){const p=document.getElementById('pagination');if(totalPages<=1){p.style.display='none';return;}p.style.display='flex';p.innerHTML=`<button class="page-btn" onclick="searchMusic(${currentPage-1})" ${currentPage<=1?'disabled':''}>${escapeHtml(translate('back'))}</button><span class="page-info">${translate('page_of',{cur:currentPage,total:totalPages})}</span><button class="page-btn" onclick="searchMusic(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>${escapeHtml(translate('forward'))}</button>`;}
@@ -234,7 +247,7 @@ const buf=await pendingMusicFile.arrayBuffer();
 let coverData='';
 if(!autoCover&&pendingFtCover){try{const r=await fetch(pendingFtCover);const b=await r.blob();coverData=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(b);});}catch(e){}}
 const safeName=(artist+' - '+title).replace(/[\\/:*?"<>|]/g,'_')+(/\.[a-z0-9]+$/i.test(pendingMusicFile.name)?pendingMusicFile.name.match(/\.[a-z0-9]+$/i)[0]:'.mp3');
-const s=await window.electronAPI.saveMusicFile({filename:safeName,data:Array.from(new Uint8Array(buf)),title:title,artist:artist,album:album,coverData:coverData});
+const s=await window.electronAPI.saveMusicFile({filename:safeName,data:buf,title:title,artist:artist,album:album,coverData:coverData});
 if(!s||!s.success){showToast(s&&s.error? s.error:'Ошибка сохранения',true);return;}
 closeFileTrackModal();pendingMusicFile=null;
 showToast('💾 Сохранено у тебя локально. Шарю в комнату...');
@@ -351,7 +364,7 @@ else showToast(d.error||'Ошибка',true);
 socket.on('tracks-refresh',()=>{
 if(document.getElementById('my-music-modal').classList.contains('open'))openMyMusic();
 const q=document.getElementById('search-input').value.trim();
-if(q)searchMusic(1);
+if(q){clearTimeout(window._trTimer);window._trTimer=setTimeout(()=>searchMusic(1),800);}
 if(window.iSharedMusic&&window.electronAPI&&window.electronAPI.startMusicShare){
 window.electronAPI.startMusicShare().then(s=>{if(!s||!s.ok)return;return window.electronAPI.getLanIp().then(ip=>fetch('http://localhost:'+s.port+'/list.json').then(r=>r.json()).then(list=>{socket.emit('share-music',{base:'http://'+ip+':'+s.port,tracks:list});}));}).catch(()=>{});
 }
