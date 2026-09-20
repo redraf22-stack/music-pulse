@@ -102,6 +102,7 @@ if(isLeaving)return;
 isLeaving=true;
 isInVoice=false;forceMuted=false;forceDeafened=false;isMuted=false;isDeafened=false;
 updateVoiceEntryButton();updateVoiceControlsInPlayer();stopSelfSpeakingDetection();
+console.log('[voice] leaveVoiceChat called, isLeaving:', isLeaving);
 try{socket.emit('leave-voice');}catch(e){}
 Object.keys(currentCalls).forEach(p=>{try{const c=currentCalls[p];if(c._audioElement){c._audioElement.pause();c._audioElement.srcObject=null;c._audioElement.remove();}if(c._gainNode)c._gainNode.disconnect();if(c._sourceNode)c._sourceNode.disconnect();if(c._shaperNode)c._shaperNode.disconnect();c.close();stopSpeakingDetection(p);}catch(e){}});
 currentCalls={};
@@ -167,7 +168,7 @@ if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeT
 ae.play().then(()=>console.log('[voice] audio playing from', pid)).catch(e=>console.error('[voice] play failed', pid, e));
 startSpeakingDetection(pid,rs);
 });
-c.on('close',()=>{console.log('[voice] call closed', c.peer);const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
+c.on('close',()=>{console.log('[voice] call closed', c.peer, 'reason:', c.closeReason || 'unknown');const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
 c.on('error',e=>console.error('[voice] call error', c.peer, e));
 }
 function handleVideoCall(call){
@@ -434,13 +435,12 @@ if(info.userId)ensurePeer().then(()=>socket.emit('request-media',{userId:info.us
 updateMediaUsersList();
 });
 }
-// Периодическая проверка здоровья войса
 // Периодическая проверка здоровья войса + принудительная очистка мусора
 setInterval(() => {
-    if (isInVoice && myStream) {
+    if (isInVoice && myStream && !isLeaving) {
         const tracks = myStream.getAudioTracks();
-        if (!tracks.length || !tracks[0].enabled) {
-            console.warn('[voice] Track lost, reconnecting...');
+        if (!tracks.length || tracks[0].readyState === 'ended') {
+            console.warn('[voice] Track lost (readyState=ended), reconnecting...');
             leaveVoiceChat().then(() => setTimeout(() => toggleVoiceConnection(), 500));
         }
     }
