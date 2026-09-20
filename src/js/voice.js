@@ -77,6 +77,7 @@ function volStore() {
         return {};
     }
 }
+function volByKey(key){const s=volStore();return s[key];}
 function getUserVolKey(u){return u.clientIp||u.name;}
 function getUserVol(u){const k=getUserVolKey(u);const v=volByKey(k);if(v!==undefined)return v;return volByKey(u.name);}
 // ===== ГОЛОС, ВИДЕО, ЭКРАН =====
@@ -118,6 +119,7 @@ try{
 let micId=selectedMicId;try{if(typeof resolveDeviceId==='function')micId=await resolveDeviceId('audioinput',selectedMicId);}catch(e){}
 const co={audio:Object.assign({echoCancellation:false,noiseSuppression:false,autoGainControl:false},micId?{deviceId:{exact:micId}}:{}),video:false};
 myStream=await navigator.mediaDevices.getUserMedia(co);
+console.log('[voice] myStream created, tracks:', myStream.getTracks().map(t=>({kind:t.kind,enabled:t.enabled,readyState:t.readyState})));
 startSelfSpeakingDetection(myStream);
 // Мониторинг трека микрофона
 const audioTrack=myStream.getAudioTracks()[0];
@@ -152,17 +154,21 @@ else if(isScreen){if(myScreenStream)call.answer(myScreenStream);else call.answer
 else{call.answer(myStream);handleAudioCall(call);}
 }
 function handleAudioCall(c){
+console.log('[voice] handleAudioCall from', c.peer);
 currentCalls[c.peer]=c;
 c.on('stream',rs=>{
+console.log('[voice] stream received from', c.peer, 'tracks:', rs.getTracks().length);
 const ctx=getGlobalAudioContext();const pid=c.peer;
 let sv=localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
 if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?getUserVol(u):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
 if(sv===undefined)sv=0.5;
 const ae=new Audio();ae.srcObject=rs;ae.volume=0;ae.muted=false;c._audioElement=ae;
-if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;}catch(e){}}
-ae.play().catch(()=>{});startSpeakingDetection(pid,rs);
+if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;}catch(e){console.error('[voice] audio graph error',e);}}
+ae.play().then(()=>console.log('[voice] audio playing from', pid)).catch(e=>console.error('[voice] play failed', pid, e));
+startSpeakingDetection(pid,rs);
 });
-c.on('close',()=>{const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
+c.on('close',()=>{console.log('[voice] call closed', c.peer);const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
+c.on('error',e=>console.error('[voice] call error', c.peer, e));
 }
 function handleVideoCall(call){
 const peerId=call.peer;
