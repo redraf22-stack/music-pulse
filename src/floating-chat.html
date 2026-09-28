@@ -1,0 +1,99 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Чат</title>
+<style>
+:root{--bg:#121212;--card:#1e1e1e;--accent:#1db954;--text:#fff;--sub:#b3b3b3;--border:#333;--input-bg:#2a2a2a;}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif;}
+html,body{height:100%;}body{background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden;}
+.fc-head{height:46px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px 0 14px;-webkit-app-region:drag;user-select:none;gap:8px;}
+.fc-title{font-size:14px;font-weight:600;color:#fff;flex:1;display:flex;align-items:center;gap:8px;}
+.fc-btn{-webkit-app-region:no-drag;background:none;border:none;color:#9a9a9a;font-size:16px;line-height:1;height:34px;min-width:34px;padding:0 8px;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;}.fc-btn:hover{background:#2a2a2a;color:#fff;}.fc-close:hover{background:#e74c3c;color:#fff;}
+.fc-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+.fc-msg{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 11px;font-size:13px;max-width:88%;align-self:flex-start;}
+.fc-msg.self{align-self:flex-end;background:#163a24;border-color:#1f5a34;}
+.fc-msg.system{align-self:center;background:none;border:none;color:var(--sub);font-size:12px;font-style:italic;}
+.fc-h{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;align-items:baseline;}
+.fc-name{font-weight:bold;font-size:12px;color:var(--accent);}.fc-name.admin{color:#ffd54a;}.fc-name.mod{color:#4aa3ff;}.fc-name.vip{color:#ff7ad9;}
+.fc-time{font-size:10px;color:#777;flex-shrink:0;}
+.fc-text{white-space:pre-wrap;word-break:break-word;line-height:1.4;}
+.fc-media img,.fc-media video{max-width:100%;border-radius:8px;display:block;margin-top:5px;}
+.fc-media audio{width:100%;margin-top:5px;}
+.fc-media a{color:var(--accent);text-decoration:none;}
+.fc-in{flex-shrink:0;display:flex;align-items:flex-end;gap:8px;padding:10px;border-top:1px solid var(--border);background:var(--card);position:relative;}
+.fc-round{width:38px;height:38px;flex-shrink:0;border:none;border-radius:50%;background:var(--input-bg);color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;}.fc-round:hover{background:#333;}
+.fc-send{background:var(--accent);color:black;}.fc-send:hover{filter:brightness(1.1);}
+.fc-in textarea{flex:1;resize:none;height:38px;max-height:90px;background:var(--input-bg);border:1px solid var(--border);border-radius:19px;color:#fff;padding:9px 14px;font-size:14px;outline:none;font-family:inherit;line-height:1.3;}.fc-in textarea:focus{border-color:var(--accent);}
+.fc-empty{color:#666;font-style:italic;text-align:center;margin:auto;font-size:13px;}
+.fc-emoji{position:absolute;left:10px;bottom:54px;width:262px;max-height:230px;overflow-y:auto;overflow-x:hidden;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:8px;display:none;grid-template-columns:repeat(8,1fr);gap:2px;z-index:10;}
+.fc-emoji.open{display:grid;}
+.fc-emoji button{width:100%;height:28px;display:flex;align-items:center;justify-content:center;background:none;border:none;font-size:17px;line-height:1;cursor:pointer;padding:0;border-radius:6px;}
+.fc-emoji button:hover{background:#333;}
+/* Тёмные скроллбары вместо браузерных белых */
+.fc-msgs::-webkit-scrollbar,.fc-emoji::-webkit-scrollbar{width:9px;height:9px;}
+.fc-msgs::-webkit-scrollbar-track,.fc-emoji::-webkit-scrollbar-track{background:transparent;}
+.fc-msgs::-webkit-scrollbar-thumb,.fc-emoji::-webkit-scrollbar-thumb{background:#4a4a4a;border-radius:5px;border:2px solid transparent;background-clip:padding-box;}
+.fc-msgs::-webkit-scrollbar-thumb:hover,.fc-emoji::-webkit-scrollbar-thumb:hover{background:#5e5e5e;background-clip:padding-box;}
+.fc-msgs,.fc-emoji{scrollbar-width:thin;scrollbar-color:#4a4a4a transparent;}
+</style></head><body>
+<div class="fc-head"><span class="fc-title">💬 Чат комнаты</span><button class="fc-btn" onclick="minWin()" title="Свернуть">—</button><button class="fc-btn" id="fs-btn" onclick="toggleFs()" title="Полный экран">⛶</button><button class="fc-btn fc-close" onclick="window.close()" title="Закрыть">✕</button></div>
+<div class="fc-msgs" id="m"><div class="fc-empty" id="empty">Нет сообщений</div></div>
+<div class="fc-in">
+<div class="fc-emoji" id="ep"></div>
+<button class="fc-round" onclick="toggleEmoji()" title="Эмодзи">😊</button>
+<textarea id="i" placeholder="Сообщение..." maxlength="500"></textarea>
+<button class="fc-round" onclick="pickFile()" title="Прикрепить файл">📎</button>
+<input type="file" id="fi" style="display:none" onchange="onFile(event)">
+<button class="fc-round fc-send" onclick="send()" title="Отправить">➤</button>
+</div>
+<script>
+const E=document.getElementById('m'),EMP=document.getElementById('empty'),IN=document.getElementById('i'),EP=document.getElementById('ep'),FI=document.getElementById('fi');
+const EMOJIS=['😀','😃','😄','😁','😆','😅','🤣','','🙂','😉','😊','😇','😍','🤩','😋','😛','😜','🤪','','🤗','🤭','🤔','🤨','😐','😶','😏','😒','','😌','😔','😪','🤤','😷','🤒','🤕','🤢','🤮','🥵','🥶','🥴','😵','🤯','🥳','😎','🤓','😕','😟','','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','👍','👏','👐','🤝','️','🤟','','👌','','👉','👆','👇','☝️','✋','🤚','🖖','🤙','❤️','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','','💞','','💗','','💘','💝','💯','💢','💥','💫','💦','💨','💣','💬','💭','💤','🔥','⭐','🌟','✨','⚡','🎉','🎊','🎈','🎁','🎂','🍰','🎵','🎤','🎸','🎺','🥁','🎮','🎯','🏆','🥇','','🏀','','⚾','','🏐','','🥊','','🚌','','🚑','🚒','✈️','☀️','🌙','☁️','⛄','🌊','🌸','🌻','🌹','🌱','🌴','🐱','🐭','🐹','🐰','🐻','🐨','🐯','🦁','','🐵','🐔','🐧','🐦','🦄','🐝','🦋','','🍎','🍐','🍊','🍋','🍌','🍉','','🍓','🍒','🍑','🍍','🥝','','🥑','','🌭','','🍪','','🍺'];
+let emojiOpen=false;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(ts){const d=new Date(ts);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+function minWin(){if(window.electronAPI&&window.electronAPI.chatMinimize)window.electronAPI.chatMinimize();}
+function toggleFs(){if(window.electronAPI&&window.electronAPI.chatToggleMaximize)window.electronAPI.chatToggleMaximize();}
+function toggleEmoji(){emojiOpen=!emojiOpen;EP.classList.toggle('open',emojiOpen);}
+function buildEmoji(){EMOJIS.filter(e=>e&&e.trim()).forEach(e=>{const b=document.createElement('button');b.type='button';b.textContent=e;b.title=e;b.onclick=()=>{const s=IN.selectionStart,en=IN.selectionEnd,t=IN.value;IN.value=t.substring(0,s)+e+t.substring(en);IN.selectionStart=IN.selectionEnd=s+e.length;IN.focus();};EP.appendChild(b);});}
+buildEmoji();
+function row(msg){
+ const me=(window._myNick&&msg.userId===window._myNick)||(msg.userName===window._myNick);
+ const div=document.createElement('div');
+ if(msg.system){div.className='fc-msg system';div.textContent=msg.text||'';E.appendChild(div);return;}
+ div.className='fc-msg'+(me?' self':'');
+ const h=document.createElement('div');h.className='fc-h';
+ const nm=document.createElement('span');let cls='fc-name',pre='';
+ if(msg.isAdmin){cls+=' admin';pre='👑 ';}else if(msg.isMod){cls+=' mod';pre='🛡️ ';}else if(msg.isVip){cls+=' vip';pre='⭐ ';}
+ nm.className=cls;nm.textContent=pre+(msg.userName||'?');
+ const tm=document.createElement('span');tm.className='fc-time';tm.textContent=fmt(msg.timestamp||Date.now());
+ h.appendChild(nm);h.appendChild(tm);div.appendChild(h);
+ if(msg.text){const t=document.createElement('div');t.className='fc-text';t.textContent=msg.text;div.appendChild(t);}
+ if(msg.mediaType&&msg.fileUrl){const md=document.createElement('div');md.className='fc-media';
+  if(msg.mediaType==='image'){const im=document.createElement('img');im.src=msg.fileUrl;im.loading='lazy';md.appendChild(im);}
+  else if(msg.mediaType==='video'){const v=document.createElement('video');v.src=msg.fileUrl;v.controls=true;v.preload='metadata';md.appendChild(v);}
+  else if(msg.mediaType==='audio'){const a=document.createElement('audio');a.src=msg.fileUrl;a.controls=true;a.preload='metadata';md.appendChild(a);}
+  else{const lk=document.createElement('a');lk.href=msg.fileUrl;lk.download=msg.fileName||'file';lk.textContent='📄 '+(msg.fileName||'Скачать');md.appendChild(lk);}
+  div.appendChild(md);}
+ E.appendChild(div);
+}
+function add(msg){if(EMP&&EMP.parentNode)EMP.remove();row(msg);E.scrollTop=E.scrollHeight;}
+function sys(text){const d=document.createElement('div');d.className='fc-msg system';d.textContent=text;E.appendChild(d);E.scrollTop=E.scrollHeight;}
+function render(payload){const list=Array.isArray(payload)?payload:((payload&&payload.msgs)||[]);if(payload&&!Array.isArray(payload)&&payload.nick)window._myNick=payload.nick;E.innerHTML='';if(!list.length){E.appendChild(EMP||Object.assign(document.createElement('div'),{className:'fc-empty',id:'empty',textContent:'Нет сообщений'}));return;}list.forEach(row);E.scrollTop=E.scrollHeight;}
+function send(){const t=IN.value.trim();if(!t)return;if(window.electronAPI&&window.electronAPI.chatSend){window.electronAPI.chatSend(t);IN.value='';IN.style.height='auto';}if(emojiOpen){emojiOpen=false;EP.classList.remove('open');}}
+IN.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+IN.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';});
+function pickFile(){FI.click();}
+async function onFile(ev){const f=ev.target.files[0];ev.target.value='';if(!f)return;const text=IN.value.trim();
+ try{
+  const fd=new FormData();fd.append('file',f);
+  const r=await fetch('/api/upload-chat',{method:'POST',body:fd});const d=await r.json();
+  if(!d.success){sys('⚠ Не удалось загрузить файл');return;}
+  if(window.electronAPI&&window.electronAPI.chatSendMedia){window.electronAPI.chatSendMedia({type:d.type,fileUrl:d.url,fileName:d.name,fileSize:d.size,text:text});IN.value='';IN.style.height='auto';}
+  else sys('⚠ Мост недоступен');
+ }catch(e){sys('⚠ Ошибка загрузки файла');}
+}
+if(window.electronAPI){
+ if(window.electronAPI.onChatHistorySync)window.electronAPI.onChatHistorySync(render);
+ if(window.electronAPI.onChatMessageSync)window.electronAPI.onChatMessageSync(add);
+ if(window.electronAPI.onChatMaximized)window.electronAPI.onChatMaximized(s=>{const b=document.getElementById('fs-btn');if(b){b.textContent=s?'🗗':'⛶';b.title=s?'Оконный режим':'Полный экран';}});
+ if(window.electronAPI.requestHistory){window.electronAPI.requestHistory();setTimeout(()=>{try{window.electronAPI.requestHistory();}catch(e){}},400);}
+}
+</script></body></html>

@@ -9,10 +9,12 @@ module.exports = function (io, R, utils) {
         socket.on('time-sync', (t0, cb) => { if (typeof cb === 'function') cb(Date.now()); });
         socket.on('heartbeat', () => { socket.lastActivity = Date.now(); socket.emit('heartbeat-ack'); });
         socket.on('register-peer-id', p => { socket.peerId = p; if (socket.roomCode) R.broadcastUsers(socket.roomCode); });
-        socket.on('create-room', (nickname, cb) => {
+        socket.on('create-room', (payload, cb) => {
+            const nickname=(payload&&payload.nickname)||payload;
+            const offline=!!(payload&&payload.offline);
             const code = String(Math.floor(10000 + Math.random() * 90000));
-            const name = nickname?.trim() || 'Аноним';
-            rooms[code] = { adminId: socket.id, lanOpen: false, adminDisconnectedAt: null, users: [{ id: socket.id, name, isAdmin: true, isMod: false, isVip: false }], queue: [], inbox: [], voteCooldown: 0, voteDuration: 15, activePoll: null, voiceEnabled: false, voiceStates: {}, randomMode: false, randomHistory: [], recentArtists: [], playHistory: [], bannedIps: [], chatMessages: [], state: { playing: false, currentTime: 0, trackUrl: null, trackName: null, trackArtist: null, trackCover: null, isLocal: false, isRepeat: false, startedAt: null, prevTrack: null } };
+            const name = (nickname||'').trim() || 'Аноним';
+            rooms[code] = { adminId: socket.id, lanOpen: false, offline: offline, adminDisconnectedAt: null, users: [{ id: socket.id, name, isAdmin: true, isMod: false, isVip: false }], queue: [], inbox: [], voteCooldown: 0, voteDuration: 15, activePoll: null, voiceEnabled: false, voiceStates: {}, randomMode: false, randomHistory: [], recentArtists: [], playHistory: [], bannedIps: [], chatMessages: [], state: { playing: false, currentTime: 0, trackUrl: null, trackName: null, trackArtist: null, trackCover: null, isLocal: false, isRepeat: false, startedAt: null, prevTrack: null } };
             rooms[code].playlists = PL.defaultPlaylists(name); rooms[code].activePlaylistId = 'classic';
             socket.join(code); socket.roomCode = code; socket.isAdmin = true; socket.isMod = false; socket.isVip = false; socket.nickname = name;
             R.broadcastUsers(code); R.broadcastQueue(code); R.broadcastInbox(code);
@@ -217,13 +219,14 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             broadcastPlaylists(socket.roomCode);
             socket.emit('playlist-open-settings', id);
         });
-        socket.on('update-playlist', data => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const pl = room.playlists.find(p => p.id === (data || {}).id); if (!pl) return; if (!pl.classic && data.name) pl.name = String(data.name).substring(0, 40); pl.includeAll = data.includeAll || pl.includeAll; pl.selected = data.selected || pl.selected; pl.excluded = data.excluded || pl.excluded || {}; broadcastPlaylists(socket.roomCode); });
+        socket.on('update-playlist', data => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const pl = room.playlists.find(p => p.id === (data || {}).id); if (!pl) return; if (!pl.classic && data.name) pl.name = String(data.name).substring(0, 40); pl.includeAll = data.includeAll || pl.includeAll; pl.selected = data.selected || pl.selected; pl.excluded = data.excluded || pl.excluded || {}; pl.plSel = data.plSel || pl.plSel || {}; broadcastPlaylists(socket.roomCode); });
         socket.on('share-music', data => {
             if (!socket.roomCode) return;
             const room = rooms[socket.roomCode]; if (!room) return;
+            if (socket.id === room.adminId) return;
             room.sharedMusic = room.sharedMusic || {};
-            room.sharedMusic[socket.nickname] = { base: (data || {}).base, tracks: (data || {}).tracks || [] };
-            io.to(socket.roomCode).emit('shared-music-update', { nick: socket.nickname, count: ((data || {}).tracks || []).length });
+            room.sharedMusic[socket.nickname] = { base: (data || {}).base, tracks: (data || {}).tracks || [], urls: (data || {}).urls || [], playlists: (data || {}).playlists || [] };
+            io.to(socket.roomCode).emit('shared-music-update', { nick: socket.nickname, count: (((data || {}).tracks || []).length + ((data || {}).urls || []).length) });
         });
         socket.on('request-share', targetNick => {
             if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return;
@@ -231,6 +234,44 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
             const target = room.users.find(u => u.name === targetNick);
             if (!target) return;
             io.to(target.id).emit('share-requested', { requester: socket.nickname });
+        });
+                socket.on('get-shared-playlists', (nick, cb) => {
+            if (typeof cb !== 'function' || !socket.roomCode) return;
+            const room = rooms[socket.roomCode]; if (!room) return cb([]);
+            const sm = room.sharedMusic && room.sharedMusic[nick];
+            cb(sm && sm.playlists ? sm.playlists.map(p => ({ id: p.id, name: p.name, count: ((p.files || []).length + (p.urls || []).length), files: p.files || [], urls: p.urls || [] })) : []);
+        });
+        socket.on('get-shared-playlist-tracks', ({ nick, id }, cb) => {
+            if (typeof cb !== 'function' || !socket.roomCode) return;
+            const room = rooms[socket.roomCode]; if (!room) return cb({ tracks: [] });
+            const sm = room.sharedMusic && room.sharedMusic[nick]; if (!sm) return cb({ tracks: [] });
+            const pl = (sm.playlists || []).find(p => p.id === id); if (!pl) return cb({ tracks: [] });
+            const byFile = {}; (sm.tracks || []).forEach(t => byFile[t.file] = t);
+            const byUrl = {}; (sm.urls || []).forEach(t => byUrl[t.id || t.url] = t);
+            const fileTracks = (pl.files || []).map(f => Object.assign({ type: 'local' }, byFile[f] || { file: f, title: f }));
+            const urlTracks = (pl.urls || []).map(u => Object.assign({ type: 'url' }, byUrl[u] || { id: u, title: u }));
+            cb({ name: pl.name, tracks: fileTracks.concat(urlTracks) });
+        });
+                socket.on('get-room-tracks-all', async (cb) => {
+            if (typeof cb !== 'function' || !socket.roomCode) return cb([]);
+            const room = rooms[socket.roomCode]; if (!room) return cb([]);
+            const out = []; const seen = new Set();
+            const push = (key, title, artist, owner) => {
+                const nk = utils.normalizeStr(title || '') + '|' + utils.normalizeStr(artist || '');
+                if (seen.has(nk)) return; seen.add(nk);
+                out.push({ key: key, title: title || '', artist: artist || '', owner: owner });
+            };
+            try {
+                const hostU = room.users.find(u => u.isAdmin);
+                const locals = await utils.getLocalTracks();
+                locals.forEach(t => push('local|' + t.filename, t.title, (t.artist && t.artist.name) || t.artist, hostU ? hostU.name : '?'));
+                room.users.forEach(u => {
+                    (require('./urltracks.js').listFor(u.name) || []).forEach(t => push('url|' + u.name + '|' + t.id, t.title, t.artist, u.name));
+                    const sm = room.sharedMusic && room.sharedMusic[u.name];
+                    if (sm) (sm.tracks || []).forEach(t => push('shared|' + u.name + '|' + t.file, t.title, t.artist, u.name));
+                });
+            } catch (e) {}
+            cb(out);
         });
         socket.on('tracks-changed', async () => {
     if (!socket.roomCode) return;

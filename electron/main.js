@@ -12,7 +12,7 @@ app.commandLine.appendSwitch('ignore-certificate-errors');
 Menu.setApplicationMenu(null);
 
 const LAN_LISTEN_PORT = 33335;
-let mainWindow = null, localServer = null, lanListener = null, foundServers = [];
+let mainWindow = null, localServer = null, lanListener = null, foundServers = [], chatFloatWin = null;
 if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
@@ -54,8 +54,7 @@ function createWindow() {
         width: 1400, height: 900, minWidth: 1000, minHeight: 700,
         icon: path.join(__dirname, '../build/icon.ico'),
         autoHideMenuBar: true,
-        titleBarStyle: 'hidden',
-        titleBarOverlay: { color: '#181818', symbolColor: '#d0d0d0', height: 32 },
+        frame: false,
         webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
         title: 'MusicPulse'
     });
@@ -113,7 +112,7 @@ function createWindow() {
         }, 30 * 60 * 1000);
     }
     if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
-    mainWindow.on('closed', () => { mainWindow = null; });
+    mainWindow.on('closed', () => { try { if (chatFloatWin && !chatFloatWin.isDestroyed()) chatFloatWin.destroy(); } catch (e) {} mainWindow = null; });
 }
 
 const floatingWindows = new Map();
@@ -154,6 +153,22 @@ ipcMain.handle('return-floating-to-main', (event, { winId }) => {
     }
     return { success: true };
 });
+ipcMain.handle('win-minimize', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.handle('win-maximize', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize();
+});
+ipcMain.handle('win-close', () => { if (mainWindow) mainWindow.close(); });
+let dragState = null;
+ipcMain.on('win-drag-start', () => {
+    if (!mainWindow) return;
+    const { screen } = require('electron');
+    dragState = { start: screen.getCursorScreenPoint(), bounds: mainWindow.getBounds() };
+});
+ipcMain.on('win-drag-move', (e, x, y) => {
+    if (mainWindow && dragState) mainWindow.setPosition(dragState.bounds.x + (x - dragState.start.x), dragState.bounds.y + (y - dragState.start.y));
+});
+ipcMain.on('win-drag-end', () => { dragState = null; });
 ipcMain.handle('close-floating-windows', (event, filter) => {
     const f = filter || {};
     [...floatingWindows.entries()].forEach(([id, entry]) => {
@@ -170,12 +185,12 @@ app.whenReady().then(() => { createWindow(); startLanListener(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // Одна кнопка: запустить сервер и сразу создать комнату
-ipcMain.handle('start-server-and-create', async (event, nick, lang) => {
+ipcMain.handle('start-server-and-create', async (event, nick, lang, offline) => {
     try {
         const md = readMusicDir(); if (md) process.env.MUSICPULSE_MUSIC = md;
         if (!localServer) localServer = await startServer(3001);
         const proto = localServer.isHttps ? 'https' : 'http';
-        await mainWindow.loadURL(`${proto}://localhost:3001/room?mode=create&nick=${encodeURIComponent(nick || '')}&lang=${encodeURIComponent(lang || 'ru')}`);
+        await mainWindow.loadURL(`${proto}://localhost:3001/room?mode=create&nick=${encodeURIComponent(nick || '')}&lang=${encodeURIComponent(lang || 'ru')}&offline=${offline ? 1 : 0}`);
         return { success: true };
     } catch (error) {
         console.error('Failed to start server:', error);
@@ -206,8 +221,12 @@ ipcMain.handle('start-music-share', async () => {
         const http = require('http');
         const mm = require('music-metadata');
         const dir = readMusicDir() || path.join(app.getPath('userData'), 'music');
+        let shareCache = { sig: '', list: [] };
         async function buildShareList() {
             const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f)) : [];
+            let sig = '';
+            for (const f of files) { try { const st = fs.statSync(path.join(dir, f)); sig += f + ':' + st.size + ':' + st.mtimeMs + '|'; } catch (e) { sig += f + '|'; } }
+            if (sig && shareCache.sig === sig) return shareCache.list;
             let ovr = {}; try { ovr = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'music-overrides.json'), 'utf8')); } catch (e) {}
             const lanIp = (() => { const os = require('os'); const nets = os.networkInterfaces(); for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) return n.address; return '127.0.0.1'; })();
             const protoS = localServer && localServer.isHttps ? 'https' : 'http';
@@ -239,13 +258,20 @@ ipcMain.handle('start-music-share', async () => {
                         }
                     } catch (e) {}
                 }
-                if (coverRel) it.cover = coverRel.startsWith('http') ? coverRel : (protoS + '://' + lanIp + ':3001' + coverRel);
+                if (coverRel) it.cover = coverRel.startsWith('http') ? coverRel : ('http://' + lanIp + ':3005' + coverRel);
                 list.push(it);
             }
+            shareCache = { sig: sig, list: list };
             return list;
         }
         const srv = http.createServer((req, res) => {
             res.setHeader('Access-Control-Allow-Origin', '*');
+            if (req.url && req.url.startsWith('/covers/')) {
+                const cdir = path.join(app.getPath('userData'), 'covers');
+                const cf = path.join(cdir, decodeURIComponent(req.url.replace(/^\//, '').split('?')[0]));
+                if (cf.startsWith(cdir) && fs.existsSync(cf)) { res.setHeader('Content-Type', cf.endsWith('.png') ? 'image/png' : 'image/jpeg'); return fs.createReadStream(cf).pipe(res); }
+                res.statusCode = 404; return res.end();
+            }
             if (req.url === '/list.json') {
                 res.setHeader('Content-Type', 'application/json');
                 buildShareList().then(l => res.end(JSON.stringify(l))).catch(() => res.end('[]'));
@@ -321,6 +347,9 @@ ipcMain.handle('save-music-file', async (event, { filename, data, title, artist,
         return { success: true, filename: safe };
     } catch (e) { return { success: false, error: e.message }; }
 });
+const PERSONAL_PL_PATH = path.join(app.getPath('userData'), 'personal-playlists.json');
+ipcMain.handle('get-personal-playlists', () => { try { return JSON.parse(fs.readFileSync(PERSONAL_PL_PATH, 'utf8')); } catch (e) { return null; } });
+ipcMain.handle('set-personal-playlists', (event, data) => { try { fs.writeFileSync(PERSONAL_PL_PATH, JSON.stringify(data)); return { success: true }; } catch (e) { return { success: false }; } });
 ipcMain.handle('get-device-settings', () => {
     const s = readMusicSettings();
     return {
@@ -355,3 +384,30 @@ ipcMain.handle('go-start', async (event, lang) => {
     await mainWindow.loadFile(path.join(__dirname, '../src/start.html'), lang ? { query: { lang: String(lang) } } : {});
     return { success: true };
 });
+ipcMain.handle('ensure-server', async () => {
+    try {
+        const md = readMusicDir(); if (md) process.env.MUSICPULSE_MUSIC = md;
+        if (!localServer) localServer = await startServer(3001);
+        return { ok: true, port: 3001, isHttps: !!localServer.isHttps };
+    } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('chat-minimize', () => { if (chatFloatWin && !chatFloatWin.isDestroyed()) chatFloatWin.minimize(); return { success: true }; });
+ipcMain.handle('close-chat-window', () => { if (chatFloatWin && !chatFloatWin.isDestroyed()) chatFloatWin.close(); return { success: true }; });
+ipcMain.on('chat-send-media', (e, payload) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chat-do-send-media', payload); });
+ipcMain.handle('open-chat-window', async () => {
+    if (chatFloatWin && !chatFloatWin.isDestroyed()) { chatFloatWin.focus(); return { success: true }; }
+    const w = new BrowserWindow({ width: 420, height: 600, minWidth: 300, minHeight: 320, frame: false, resizable: true, alwaysOnTop: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false } });
+    let origin = 'http://localhost:3001'; try { origin = new URL(mainWindow.getURL()).origin; } catch (e) {}
+    const q = new URLSearchParams({ lang: (readMusicSettings().lang || 'ru') });
+    await w.loadURL(origin + '/floating-chat.html?' + q.toString());
+    chatFloatWin = w;
+    w.on('closed', () => { chatFloatWin = null; if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chat-window-closed'); });
+    w.on('maximize', () => { try { w.webContents.send('chat-maximized', true); } catch (e) {} });
+    w.on('unmaximize', () => { try { w.webContents.send('chat-maximized', false); } catch (e) {} });
+    return { success: true };
+});
+ipcMain.handle('chat-toggle-maximize', () => { if (chatFloatWin && !chatFloatWin.isDestroyed()) { if (chatFloatWin.isMaximized()) chatFloatWin.unmaximize(); else chatFloatWin.maximize(); } return { success: true }; });
+ipcMain.on('chat-forward', (e, msg) => { if (chatFloatWin && !chatFloatWin.isDestroyed()) chatFloatWin.webContents.send('chat-message-sync', msg); });
+ipcMain.on('chat-history-push', (e, msgs) => { if (chatFloatWin && !chatFloatWin.isDestroyed()) chatFloatWin.webContents.send('chat-history-sync', msgs); });
+ipcMain.on('chat-send-from-floating', (e, text) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chat-do-send-text', String(text || '').slice(0, 500)); });
+ipcMain.on('chat-request-history', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chat-request-history'); });

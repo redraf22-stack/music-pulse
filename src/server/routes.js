@@ -6,7 +6,7 @@ async function deezerSearch(q) {
     const now = Date.now();
     const c = deezerCache.get(key);
     if (c && now - c.time < 120000) return c;
-    const r = await axios.get(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=50&index=0`, { timeout: 10000 });
+    const r = await axios.get(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=500&index=0`, { timeout: 15000 });
     const entry = { time: now, tracks: r.data.data || [], total: r.data.total || 0 };
     deezerCache.set(key, entry);
     if (deezerCache.size > 100) deezerCache.delete(deezerCache.keys().next().value);
@@ -50,7 +50,7 @@ module.exports = function (app, utils) {
     const uploadLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 20 });
 
     app.get('/api/local-tracks', localLimiter, async (req, res) => {
-    const page = parseInt(req.query.page) || 1, perPage = 5, filter = (req.query.filter || '').toLowerCase().trim();
+    const page = parseInt(req.query.page) || 1, perPage = req.query.all === '1' ? 1000 : 5, filter = (req.query.filter || '').toLowerCase().trim();
     const owner = (req.query.owner || '').trim();
     const roomCode = (req.query.room || '').toUpperCase();
     try {
@@ -61,6 +61,7 @@ module.exports = function (app, utils) {
             const plTracks = await require('./playlists.js').resolveTracks(room, false);
             combined = plTracks.map(t => ({
             ...t,
+            owner: t.owner || (room.users.find(u => u.isAdmin) || {}).name || '',
             normalizedTitle: utils.normalizeStr(t.title),
             normalizedArtist: utils.normalizeStr((t.artist && t.artist.name) || t.artist || ''),
             normalizedAlbum: ''
@@ -94,45 +95,49 @@ module.exports = function (app, utils) {
 });
 
     app.get('/api/search', searchLimiter, async (req, res) => {
-    const q = (req.query.q || '').trim(), page = parseInt(req.query.page) || 1, lc = 5;
+    const q = (req.query.q || '').trim(), page = parseInt(req.query.page) || 1, lc = req.query.all === '1' ? 1000 : 5;
     const owner = (req.query.owner || '').trim();
     const roomCode = (req.query.room || '').toUpperCase();
     if (!q) return res.status(400).json({ error: 'Нет запроса' });
     try {
         const nq = utils.normalizeStr(q);
         const room = roomCode && ROOMS && ROOMS[roomCode] ? ROOMS[roomCode] : null;
+        const OFF = !!(room && room.offline);
 
         // 1. Скачанные (из плейлиста) + URL — считаем на каждой странице (нужно для смещения)
         let fixed = [];
+        let plUrlKeys = null;
+        let allowedLocalFiles = null;
         if (room) {
             try {
                 const plTracks = await require('./playlists.js').resolveTracks(room, false);
+                allowedLocalFiles = new Set(plTracks.filter(t => !t.isUrl && !t.isShared).map(t => t.filename));
+                plUrlKeys = new Set(plTracks.filter(t => t.isUrl).map(t => t.key));
                 fixed = plTracks
                     .filter(t => !t.isUrl && ((utils.normalizeStr(t.title) || '').includes(nq) || (utils.normalizeStr((t.artist && t.artist.name) || t.artist || '') || '').includes(nq)))
-                    .map(t => utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, duration: Math.floor(t.duration || 30), cover: t.cover || '', preview: '/local-file?p=' + encodeURIComponent(t.filename), isLocal: true, isUrl: false }));
+                    .map(t => utils.normalizeTrack({ id: 'local-' + t.filename, title: t.title, artist: t.artist, duration: Math.floor(t.duration || 30), cover: t.cover || '', preview: '/local-file?p=' + encodeURIComponent(t.filename), isLocal: true, isUrl: false, owner: t.owner || (room.users.find(u => u.isAdmin) || {}).name || '' }));
             } catch (e) { console.error('[search] playlist fail:', e.message); }
         }
-        if (owner) {
+        if (owner && !OFF) {
             urltracks.listFor(owner).forEach(t => {
+                if (plUrlKeys && !plUrlKeys.has('url|' + owner + '|' + t.id)) return;
                 if ((utils.normalizeStr(t.title) || '').includes(nq) || (utils.normalizeStr(t.artist || '') || '').includes(nq)) {
-                    fixed.push(utils.normalizeTrack({ id: 'url-' + t.id, title: t.title, artist: t.artist, duration: 0, cover: t.cover || '', preview: t.preview || ('/url-proxy?url=' + encodeURIComponent(t.url)), isLocal: true, isUrl: true, autoCover: t.autoCover }));
+                    fixed.push(utils.normalizeTrack({ id: 'url-' + t.id, title: t.title, artist: t.artist, duration: 0, cover: t.cover || '', preview: t.preview || ('/url-proxy?url=' + encodeURIComponent(t.url)), isLocal: true, isUrl: true, autoCover: t.autoCover, owner: owner }));
                 }
             });
         }
 
         // 2. Deezer — ОДИН запрос на весь поиск (кеш 2 мин), как в старом + обложки
         let dzTracks = [], dzTotal = 0;
-        try {
-            const dz = await deezerSearch(q);
-            dzTracks = dz.tracks; dzTotal = dz.total;
-        } catch (e) { console.error('[search] deezer fail:', e.message); }
+        if(!OFF){try{const dz=await deezerSearch(q);dzTracks=dz.tracks;dzTotal=dz.total;}catch(e){console.error('[search] deezer fail:',e.message);}}
 
         const localTracks = await utils.getLocalTracks();
+        const matchPool = allowedLocalFiles ? localTracks.filter(x => allowedLocalFiles.has(x.filename)) : localTracks;
         const fixedKeys = new Set(fixed.map(t => utils.normalizeStr(t.title) + '|' + utils.normalizeStr((t.artist && t.artist.name) || '')));
         const deezerAll = dzTracks
             .filter(d => !fixedKeys.has(utils.normalizeStr(d.title) + '|' + utils.normalizeStr((d.artist && d.artist.name) || '')))
             .map(t => {
-                const lm = utils.findLocalMatch(t, localTracks);
+                const lm = utils.findLocalMatch(t, matchPool);
                 if (lm) return utils.normalizeTrack({ ...t, isLocal: true, preview: '/local-file?p=' + encodeURIComponent(lm.filename), duration: Math.floor(lm.duration || t.duration), cover: t.album?.cover_small });
                 return utils.normalizeTrack({ ...t, isLocal: false, cover: t.album?.cover_small });
             });
@@ -141,8 +146,10 @@ module.exports = function (app, utils) {
         if (page === 1) {
             const coverMap = new Map();
             dzTracks.forEach(d => coverMap.set(utils.normalizeStr(d.title) + '|' + utils.normalizeStr((d.artist && d.artist.name) || ''), (d.album && (d.album.cover_medium || d.album.cover_small)) || ''));
+            const PL=require('./playlists.js');
             await Promise.all(fixed.map(async t => {
                 if (!t.cover) {
+                    if (OFF) { if(!t.isUrl){try{t.cover=await PL.resolveLocalCover({filename:t.filename||t.id.replace(/^local-/,''),title:t.title,artist:t.artist},false);}catch(e){}} return; }
                     const key = utils.normalizeStr(t.title) + '|' + utils.normalizeStr((t.artist && t.artist.name) || '');
                     t.cover = coverMap.get(key) || await utils.findCover(t.title, (t.artist && t.artist.name) || '');
                 }
@@ -159,8 +166,8 @@ module.exports = function (app, utils) {
         }
 
         console.log('[search]', JSON.stringify({ q, page, fixed: fixed.length, deezer: deezerAll.length, out: data.length }));
-        const total = fixed.length + dzTotal;
-        res.json({ data, total, page, pages: Math.ceil(total / lc) });
+        const total = fixed.length + deezerAll.length;
+        res.json({ data, total, page, pages: Math.max(1, Math.ceil(total / lc)) });
     } catch (e) { console.error('[search]', e.message); res.status(500).json({ error: 'Ошибка API' }); }
 });
 
@@ -256,12 +263,13 @@ app.post('/api/confirm-music', require('express').json(), async (req, res) => {
     fs.copyFileSync(src, dest); try { fs.unlinkSync(src); } catch (e) {}
     try { utils.getLocalTracks(true); } catch (e) {}
     if (cover) { try { require('./playlists.js').setOverride(name, { cover: cover }); } catch (e) {} }
-    // Новая песня — ВЫКЛЮЧЕНА во всех плейлистах комнаты, где есть владелец
+    // Новая песня — ВЫКЛЮЧЕНА во всех плейлистах комнаты, КРОМЕ classic
     if (ROOMS && owner) {
         Object.keys(ROOMS).forEach(code => {
             const room = ROOMS[code];
             if (!room || !room.users.some(u => u.name === owner)) return;
             (room.playlists || []).forEach(pl => {
+                if (pl.classic) return; // В classic всё включено по умолчанию
                 if (pl.includeAll && pl.includeAll[owner]) { pl.excluded = pl.excluded || {}; pl.excluded['local|' + name] = true; }
             });
         });
@@ -337,7 +345,8 @@ app.get('/api/my-tracks', async (req, res) => {
                 const shared = [];
         const roomCode = (req.query.room || '').toUpperCase();
         const room = ROOMS && ROOMS[roomCode];
-        if (room && room.sharedMusic && room.sharedMusic[owner]) {
+        const hostU = room ? room.users.find(u => u.isAdmin) : null;
+        if (room && owner && hostU && owner !== hostU.name && room.sharedMusic && room.sharedMusic[owner]) {
             room.sharedMusic[owner].tracks.forEach(t => {
                 const o = ovr['shared|' + owner + '|' + t.file] || {};
                 shared.push({ type: 'shared', file: t.file, title: o.title || t.title, artist: o.artist || t.artist, album: '', cover: o.cover || t.cover || '', duration: 0, autoCover: !(('cover' in o ? o.cover : '') || t.cover || ''), prevCover: '' });

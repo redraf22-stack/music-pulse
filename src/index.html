@@ -26,6 +26,7 @@
 <div class="tech-panel" id="tech-settings-panel" style="display:none;">
 <button class="tech-btn" id="lan-toggle-btn" onclick="toggleLan()" data-i18n="lan_off">📡 Скрыта (вход по коду)</button>
 <div class="voice-toggle-row"><span class="sidebar-label" style="margin:0" data-i18n="voice_chat_label">Голосовой чат</span><button class="voice-toggle-btn off" id="voice-chat-toggle" onclick="toggleVoiceChatSetting()" data-i18n="voice_off">ВЫКЛ</button></div>
+<button class="tech-btn" id="auto-request-btn" onclick="toggleAutoRequest()">📥 Авто-запрос треков при входе</button>
 <button class="tech-flash-btn tech-sub" id="vote-settings-btn" onclick="toggleVoteSettings()" style="display:none;" data-i18n="vote_settings">⚡ Настройки голосования</button>
 <div id="admin-controls" class="tech-sub-panel" style="display:none;">
 <div class="setting-row"><span class="sidebar-label" style="margin:0" data-i18n="cooldown_label">Кулдаун (сек)</span><div class="setting-input-wrap"><input type="number" id="cooldown-input" class="setting-input" value="0" min="0" autocomplete="off" onchange="updateCooldown(this.value)"><div class="setting-spinners"><button class="setting-spinner" type="button" onclick="spinSetting('cooldown-input',1)">▲</button><button class="setting-spinner" type="button" onclick="spinSetting('cooldown-input',-1)">▼</button></div></div></div>
@@ -46,7 +47,7 @@
 <div class="ac-wrapper" id="ac-search-wrapper" style="flex:1;margin-bottom:0;"><input type="text" id="search-input" autocomplete="off" data-i18n-ph="search_ph"><div class="ac-list" id="ac-search-list"></div></div>
 <div style="display:flex;gap:6px;align-items:center;">
 <button class="add-url-small" id="add-url-btn" onclick="toggleAddMenu()" title="Добавить трек по URL">➕</button>
-<button class="add-url-small" id="my-music-btn" onclick="openMyMusic()" title="Моя музыка">📝</button>
+<button class="add-url-small" id="song-settings-btn" onclick="openSongSettings()" title="Настройки песен" style="width:34px;height:34px;font-size:14px;">⚙</button>
 </div>
 </div>
 <div id="results"></div><div id="pagination" class="pagination" style="display:none;"></div>
@@ -155,8 +156,18 @@
 <h2>🎼 Настройки плейлиста</h2>
 <div class="url-field"><label>Название</label><input type="text" id="pl-name-input"></div>
 <div class="pl-body">
-<div class="pl-col"><div class="pl-col-title">Участники (галочка = все его треки, 2×клик = список)</div><div id="pl-users-list" class="pl-list"></div></div>
-<div class="pl-col" id="pl-tracks-col" style="display:none;"><div class="pl-col-title" id="pl-tracks-title">Треки</div><input type="text" id="pl-track-search" class="pl-search" placeholder="Поиск по названию..." oninput="renderPlTracks(this.value)"><div id="pl-tracks-list" class="pl-list"></div></div>
+<div class="pl-col"><div class="pl-col-title">Участники (галочка = есть включённые треки, клик = плейлисты)</div><div id="pl-users-list" class="pl-list"></div></div>
+<div class="pl-col" id="pl-tracks-col" style="display:none;">
+<button id="pl-back-btn" onclick="plBack()" style="display:none;margin:8px 6px 4px;border:1px solid var(--border);background:#2a2a2a;color:var(--sub);border-radius:6px;padding:7px 16px;font-size:12px;cursor:pointer;">← Назад</button>
+<div class="pl-col-title" id="pl-tracks-title">Все треки комнаты</div>
+<input type="text" id="pl-track-search" class="pl-search" placeholder="Поиск по названию, исполнителю, владельцу..." oninput="plTracksSearch(this.value)">
+<div id="pl-sort-row" style="display:flex;gap:6px;margin:0 6px 4px;">
+<button class="pl-btn" id="pl-sort-title" style="width:auto;padding:4px 10px;font-size:11px;" onclick="plSortBy('title')">Назв.</button>
+<button class="pl-btn" id="pl-sort-artist" style="width:auto;padding:4px 10px;font-size:11px;" onclick="plSortBy('artist')">Автор</button>
+<button class="pl-btn" id="pl-sort-owner" style="width:auto;padding:4px 10px;font-size:11px;" onclick="plSortBy('owner')">Ник</button>
+</div>
+<div id="pl-tracks-list" class="pl-list"></div>
+</div>
 </div>
 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
 <button id="pl-delete-btn" style="padding:10px 22px;border-radius:8px;border:none;background:var(--danger);color:white;font-weight:bold;cursor:pointer;margin-right:auto;" onclick="deletePlaylist()">Удалить</button>
@@ -175,6 +186,7 @@
 <div class="chat-left-panel">
 <div class="chat-header" id="chat-header">
 <span class="chat-title">💬 Чат комнаты</span>
+<button class="chat-btn" onclick="detachChat()" title="Открепить чат в отдельное окно">⧉</button>
 <button class="chat-btn" id="chat-fullscreen-btn" onclick="toggleChatFullscreen()" title="Полный экран">⛶</button>
 <button class="chat-btn close" onclick="toggleChat()" title="Закрыть">✕</button>
 </div>
@@ -238,12 +250,114 @@
 <div class="modal-field"><label>Микрофон (ввод)</label><select class="modal-select" id="room-mic-select"><option value="">По умолчанию</option></select></div>
 <div class="modal-field"><label>Динамики (вывод)</label><select class="modal-select" id="room-speaker-select"><option value="">По умолчанию</option></select></div>
 <div class="modal-field"><label>📷 Камера (видео)</label><select class="modal-select" id="room-camera-select"><option value="">По умолчанию</option></select></div>
-<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">
+<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
+<button class="secondary" style="width:100%;" onclick="closeRoomDeviceSettings();openPersonalPlaylistsManager();">📚 Личные плейлисты</button>
+<div style="display:flex;justify-content:flex-end;gap:8px;">
 <button class="secondary" onclick="closeRoomDeviceSettings()">Отмена</button>
 <button class="primary" onclick="saveRoomDeviceSettings()">✓ Применить</button>
 </div>
 </div>
 </div>
+</div>
+
+<!-- Менеджер личных плейлистов -->
+<div id="personal-playlists-manager-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:500px;">
+<button class="url-modal-close" onclick="closePersonalPlaylistsManager()">✕</button>
+<h2 style="margin:0 0 12px;">📚 Личные плейлисты</h2>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+<button onclick="openPersonalPlaylistEditor(null)" title="Новый плейлист" style="width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:#2a2a2a;color:var(--sub);font-size:16px;cursor:pointer;line-height:1;">+</button>
+<span style="color:var(--sub);font-size:12px;">Двойной клик по плейлисту — настройки</span>
+</div>
+<div id="personal-playlists-list" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+</div>
+</div>
+
+<!-- Редактор личного плейлиста -->
+<div id="personal-playlist-editor-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:900px;">
+<button class="url-modal-close" onclick="closePersonalPlaylistEditor()">✕</button>
+<h2 id="personal-pl-editor-title" style="margin:0 0 12px;">➕ Новый плейлист</h2>
+<div class="url-field"><label>Название</label><input type="text" id="personal-pl-name-input" placeholder="Название плейлиста"></div>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);margin:0 0 12px;cursor:pointer;"><input type="checkbox" id="personal-pl-autoshare"> Авто-добавление в комнату (📤)</label>
+<div class="pl-body" style="height:420px;">
+<div class="pl-col">
+<div class="pl-col-title">Все треки</div>
+<input type="text" id="personal-pl-all-search" placeholder="Поиск по названию..." oninput="renderPersonalEditorColumns()" style="flex-shrink:0;height:34px;margin:6px;width:calc(100% - 12px);box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:6px;padding:8px 10px;color:#eee;font-size:12px;outline:none;">
+<div id="personal-pl-all-tracks" class="pl-list"></div>
+</div>
+<div class="pl-col">
+<div class="pl-col-title">В плейлисте</div>
+<input type="text" id="personal-pl-sel-search" placeholder="Поиск по названию..." oninput="renderPersonalEditorColumns()" style="flex-shrink:0;height:34px;margin:6px;width:calc(100% - 12px);box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:6px;padding:8px 10px;color:#eee;font-size:12px;outline:none;">
+<div id="personal-pl-selected-tracks" class="pl-list"></div>
+</div>
+</div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+<button id="personal-pl-delete-btn" style="padding:10px 22px;border-radius:8px;border:none;background:var(--danger);color:white;font-weight:bold;cursor:pointer;margin-right:auto;display:none;" onclick="deleteCurrentPersonalPlaylist()">Удалить</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closePersonalPlaylistEditor()">Отмена</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="savePersonalPlaylistEditor()">Сохранить</button>
+</div>
+</div>
+</div>
+<!-- Выбор плейлистов для передачи -->
+<div id="share-select-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:460px;">
+<button class="url-modal-close" onclick="declineShare()">✕</button>
+<h2 style="margin:0 0 8px;">📤 Запрос треков</h2>
+<div style="color:var(--sub);font-size:12px;margin-bottom:10px;">Запрашивает: <b id="share-select-who"></b>. Отметь плейлисты для передачи.</div>
+<div id="share-select-list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="declineShare()">Отказаться</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="confirmShareSelected()">Передать</button>
+</div>
+</div>
+</div>
+
+<div id="song-settings-modal" class="playlist-view-modal"><div class="plv-box" style="width:520px;">
+<button class="url-modal-close" onclick="closeSongSettings()">✕</button>
+<h2 style="margin:0 0 14px;">⚙ Настройки песен</h2>
+
+<div class="ss-sec"><div class="ss-title">Просмотр</div>
+<div class="lang-switch">
+<button class="lang-btn" id="ss-view-pages" onclick="setSearchView('pages')">Страницы по 5</button>
+<button class="lang-btn" id="ss-view-list" onclick="setSearchView('list')">Списком</button>
+</div></div>
+
+<div class="ss-sec"><div class="ss-title">Фильтры</div>
+<div class="ss-row"><span>Сортировка</span><div class="lang-switch" style="flex:1">
+<button class="lang-btn" id="ss-sort-none" onclick="setSSort(null)">Без</button>
+<button class="lang-btn" id="ss-sort-title" onclick="setSSort('title')">Название</button>
+<button class="lang-btn" id="ss-sort-artist" onclick="setSSort('artist')">Автор</button>
+</div></div>
+<div class="ss-row"><span>Тип</span><div class="lang-switch" style="flex:1">
+<button class="lang-btn" id="ss-type-all" onclick="setSType('all')">Все</button>
+<button class="lang-btn" id="ss-type-local" onclick="setSType('local')">Local</button>
+<button class="lang-btn" id="ss-type-url" onclick="setSType('url')">URL</button>
+</div></div>
+<div class="ss-row"><span>Игрок</span><select class="modal-select" id="ss-owner" onchange="setSOwner(this.value)" style="flex:1"></select></div>
+</div>
+
+<div class="ss-sec"><div class="ss-title">Мои песни</div>
+<button class="settings-nav-btn" onclick="if(window.closeSongSettings)closeSongSettings();if(window.openMyMusic)openMyMusic();else showToast('Моя музыка недоступна',true);" style="width:100%;padding:10px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;"><span style="font-size:16px;">📝</span><span style="flex:1;text-align:left;">Открыть «Моя музыка»</span><span style="color:var(--sub);">›</span></button>
+</div>
+
+<div class="ss-sec"><div class="ss-title">Личные плейлисты</div>
+<button class="settings-nav-btn" onclick="if(window.closeSongSettings)closeSongSettings();if(window.openPersonalPlaylistsManager)openPersonalPlaylistsManager();else showToast('Личные плейлисты недоступны',true);" style="width:100%;padding:10px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;"><span style="font-size:16px;">📚</span><span style="flex:1;text-align:left;">Открыть «Личные плейлисты»</span><span style="color:var(--sub);">›</span></button>
+</div>
+</div></div>
+
+<div id="edit-track-modal" class="playlist-view-modal">
+<div class="url-modal-box">
+<button class="url-modal-close" onclick="closeStartEditTrack()">✕</button>
+<h2 id="set-title-modal">⚙ Редактирование</h2>
+<div id="set-fields"></div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closeStartEditTrack()">Отмена</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="saveStartEditTrack()">Сохранить</button>
+</div>
+</div>
+</div>
+
 
 <script src="js/i18n.js"></script>
 <script src="js/helpers.js"></script>
@@ -254,5 +368,6 @@
 <script src="js/chat.js"></script>
 <script src="js/app.js"></script>
 <script src="js/guide.js"></script>
+<script src="/js/personal-playlists.js"></script>
 </body>
 </html>

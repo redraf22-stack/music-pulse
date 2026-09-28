@@ -17,9 +17,11 @@ _dsMicGroup=ds.micGroup||'';_dsSpeakerGroup=ds.speakerGroup||'';_dsCameraGroup=d
 async function enumerateDevices(){
 try{
 await loadDeviceSettings();
+let d=await navigator.mediaDevices.enumerateDevices();
+if(!d.some(x=>x.label)){
 const ts=await navigator.mediaDevices.getUserMedia({audio:true,video:true}).catch(function(){return navigator.mediaDevices.getUserMedia({audio:true});});
-ts.getTracks().forEach(function(t){t.stop();});
-const d=await navigator.mediaDevices.enumerateDevices();
+if(ts){ts.getTracks().forEach(function(t){t.stop();});d=await navigator.mediaDevices.enumerateDevices();}
+}
 const m=document.getElementById('mic-select'),s=document.getElementById('speaker-select'),cam=document.getElementById('camera-select');
 if(!m||!s||!cam)return;
 m.innerHTML='<option value="">'+escapeHtml(translate('settings_default'))+'</option>';
@@ -78,25 +80,63 @@ if(label){const o=opts.find(x=>x.textContent===label);if(o){sel.value=o.value;re
 sel.value='';
 }
 
-function openSettings(){const m=document.getElementById('settings-modal');if(!m)return;m.classList.add('open');enumerateDevices();}
+function openSettings(){
+    const m=document.getElementById('settings-modal');
+    if(!m)return;
+    m.classList.add('open');
+    // Не открываем устройства автоматически — только при клике
+}
 function closeSettings(){const m=document.getElementById('settings-modal');if(m)m.classList.remove('open');}
 
+function openDevicesModal(){
+    const m=document.getElementById('devices-modal');
+    if(!m)return;
+    m.classList.add('open');
+    enumerateDevices();
+}
+function closeDevicesModal(){const m=document.getElementById('devices-modal');if(m)m.classList.remove('open');}
+
+function openMusicModal(){
+    const m=document.getElementById('music-modal');
+    if(!m)return;
+    m.classList.add('open');
+    // Загружаем путь к папке
+    if(window.electronAPI&&window.electronAPI.getMusicDir){
+        window.electronAPI.getMusicDir().then(r=>{
+            const inp=document.getElementById('music-dir-input');
+            if(inp&&r&&r.dir)inp.value=r.dir;
+        }).catch(()=>{});
+    }
+}
+function closeMusicModal(){const m=document.getElementById('music-modal');if(m)m.classList.remove('open');}
+
 (function(){
-const m=document.getElementById('settings-modal');
-if(m)m.addEventListener('click',function(e){if(e.target===m)closeSettings();});
+    ['settings-modal','devices-modal','music-modal'].forEach(id=>{
+        const m=document.getElementById(id);
+        if(m)m.addEventListener('click',function(e){
+            if(e.target===m){
+                if(id==='settings-modal')closeSettings();
+                else if(id==='devices-modal')closeDevicesModal();
+                else if(id==='music-modal')closeMusicModal();
+            }
+        });
+    });
 })();
 
 (function(){
-const cb=document.getElementById('autostart-check');
-if(!cb)return;
-cb.addEventListener('change',function(){if(window.electronAPI&&window.electronAPI.setAutostart)window.electronAPI.setAutostart(cb.checked);});
-const origOpenAutostart=window.openSettings;
-window.openSettings=function(){origOpenAutostart();if(window.electronAPI&&window.electronAPI.getAutostart)window.electronAPI.getAutostart().then(r=>{cb.checked=!!(r&&r.enabled);});};
+    const cb=document.getElementById('autostart-check');
+    if(!cb)return;
+    cb.addEventListener('change',function(){if(window.electronAPI&&window.electronAPI.setAutostart)window.electronAPI.setAutostart(cb.checked);});
+    const origOpen=window.openSettings;
+    window.openSettings=function(){
+        origOpen();
+        if(window.electronAPI&&window.electronAPI.getAutostart)window.electronAPI.getAutostart().then(r=>{cb.checked=!!(r&&r.enabled);});
+    };
 })();
 
 window.addEventListener('load',()=>{
-setTimeout(()=>{applySpeakerToDevice().catch(()=>{});},500);
-setTimeout(()=>{applySpeakerToDevice().catch(()=>{});},2000);
-setTimeout(()=>{applySpeakerToDevice().catch(()=>{});},5000);
-try{if(typeof audio!=='undefined')audio.addEventListener('play',()=>{applySpeakerToDevice().catch(()=>{});});}catch(e){}
+    setTimeout(()=>{applySpeakerToDevice().catch(()=>{});},500);
+    setTimeout(()=>{applySpeakerToDevice().catch(()=>{});},2000);
+    setTimeout(()=>{applySpeakerToDevice().catch(()=>{});},5000);
+    try{if(typeof audio!=='undefined')audio.addEventListener('play',()=>{applySpeakerToDevice().catch(()=>{});});}catch(e){}
 });

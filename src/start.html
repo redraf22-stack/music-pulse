@@ -9,18 +9,100 @@
 <div class="toast" id="toast"></div>
 <div class="custom-modal-overlay" id="custom-modal"><div class="custom-modal-box"><span class="cm-icon" id="cm-icon"></span><div class="cm-title" id="cm-title"></div><div class="cm-message" id="cm-message"></div><div class="cm-buttons" id="cm-buttons"></div></div></div>
 
+<!-- ГЛАВНОЕ ОКНО НАСТРОЕК -->
 <div class="modal-overlay" id="settings-modal">
 <div class="modal-box">
 <button class="modal-close" onclick="closeSettings()">✕</button>
 <h2 data-i18n="settings_title">⚙️ Настройки</h2>
-<div class="modal-field"><label data-i18n="settings_lang">Язык / Language</label><div class="lang-switch"><button class="lang-btn active" id="lang-ru" onclick="setLanguage('ru')">Русский</button><button class="lang-btn" id="lang-en" onclick="setLanguage('en')">English</button></div></div>
-<div class="modal-field"><label data-i18n="settings_mic">Микрофон (ввод)</label><select class="modal-select" id="mic-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
-<div class="modal-field"><label data-i18n="settings_speaker">Динамики (вывод)</label><select class="modal-select" id="speaker-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
-<div class="modal-field"><label data-i18n="camera_label">📷 Камера (видео)</label><select class="modal-select" id="camera-select" onchange="saveDeviceSettings()"><option value="" data-i18n="settings_default">По умолчанию</option></select></div>
-<div class="modal-field"><label>📁 Папка с музыкой</label><div style="display:flex;gap:8px;align-items:center;"><input type="text" id="music-dir-input" readonly style="margin-bottom:0;flex:1;" placeholder="По умолчанию"><button class="btn-small" onclick="pickMusicDir()" style="flex-shrink:0;">Выбрать</button></div><div style="font-size:11px;color:var(--sub);margin-top:4px;">Где хранятся твои MP3/WAV/OGG файлы</div></div>
-<div class="modal-field"><label>Запуск при включении компьютера</label><div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autostart-check"><span style="font-size:12px;color:var(--sub);">Запускать приложение вместе с Windows (по умолчанию выкл)</span></div></div>
+
+<div class="modal-field"><label data-i18n="settings_lang">Язык / Language</label>
+<div class="lang-switch">
+<button class="lang-btn active" id="lang-ru" onclick="setLanguage('ru')">Русский</button>
+<button class="lang-btn" id="lang-en" onclick="setLanguage('en')">English</button>
+</div></div>
+
+<div class="modal-field">
+<button class="settings-nav-btn" onclick="openDevicesModal()" style="width:100%;padding:12px 16px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:0.2s;">
+<span style="font-size:18px;">🎙</span>
+<span style="flex:1;text-align:left;">Устройства</span>
+<span style="color:var(--sub);">›</span>
+</button></div>
+
+<div class="modal-field">
+<button class="settings-nav-btn" onclick="openMusicModal()" style="width:100%;padding:12px 16px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:0.2s;">
+<span style="font-size:18px;">🎵</span>
+<span style="flex:1;text-align:left;">Настройки музыки</span>
+<span style="color:var(--sub);">›</span>
+</button></div>
+
+<div class="modal-field"><label>Запуск при включении компьютера</label>
+<div style="display:flex;align-items:center;gap:8px;">
+<input type="checkbox" id="autostart-check">
+<span style="font-size:12px;color:var(--sub);">Запускать приложение вместе с Windows</span>
+</div></div>
+
 <div style="margin-top:16px;display:flex;justify-content:flex-end;">
 <button class="primary" onclick="closeSettings()" style="padding:10px 22px;">✓ Готово</button>
+</div>
+</div>
+</div>
+
+<!-- ОКНО УСТРОЙСТВ -->
+<div class="modal-overlay" id="devices-modal">
+<div class="modal-box">
+<button class="modal-close" onclick="closeDevicesModal()">✕</button>
+<h2>🎙 Устройства</h2>
+
+<div class="modal-field"><label data-i18n="settings_mic">Микрофон (ввод)</label>
+<select class="modal-select" id="mic-select" onchange="saveDeviceSettings()">
+<option value="" data-i18n="settings_default">По умолчанию</option>
+</select></div>
+
+<div class="modal-field"><label data-i18n="settings_speaker">Динамики (вывод)</label>
+<select class="modal-select" id="speaker-select" onchange="saveDeviceSettings()">
+<option value="" data-i18n="settings_default">По умолчанию</option>
+</select></div>
+
+<div class="modal-field"><label data-i18n="camera_label">📷 Камера (видео)</label>
+<select class="modal-select" id="camera-select" onchange="saveDeviceSettings()">
+<option value="" data-i18n="settings_default">По умолчанию</option>
+</select></div>
+
+<div style="margin-top:16px;display:flex;justify-content:flex-end;">
+<button class="primary" onclick="closeDevicesModal()" style="padding:10px 22px;">✓ Готово</button>
+</div>
+</div>
+</div>
+
+<!-- ОКНО МУЗЫКИ -->
+<div class="modal-overlay" id="music-modal">
+<div class="modal-box">
+<button class="modal-close" onclick="closeMusicModal()">✕</button>
+<h2>🎵 Настройки музыки</h2>
+
+<div class="modal-field"><label>📁 Папка с музыкой</label>
+<div style="display:flex;gap:8px;align-items:center;">
+<input type="text" id="music-dir-input" readonly style="margin-bottom:0;flex:1;" placeholder="По умолчанию">
+<button class="btn-small" onclick="pickMusicDir()" style="flex-shrink:0;">Выбрать</button>
+</div>
+<div style="font-size:11px;color:var(--sub);margin-top:4px;">Где хранятся твои MP3/WAV/OGG файлы</div></div>
+
+<div class="modal-field">
+<button class="settings-nav-btn" onclick="closeMusicModal();openPersonalPlaylistsManager();" style="width:100%;padding:12px 16px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:0.2s;">
+<span style="font-size:18px;">📚</span>
+<span style="flex:1;text-align:left;">Личные плейлисты</span>
+<span style="color:var(--sub);">›</span>
+</button></div>
+
+<div class="modal-field">
+<button class="settings-nav-btn" onclick="closeMusicModal();openMyMusic();" style="width:100%;padding:12px 16px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:0.2s;">
+<span style="font-size:18px;">📝</span>
+<span style="flex:1;text-align:left;">Моя музыка</span>
+<span style="color:var(--sub);">›</span>
+</button></div>
+
+<div style="margin-top:16px;display:flex;justify-content:flex-end;">
+<button class="primary" onclick="closeMusicModal()" style="padding:10px 22px;">✓ Готово</button>
 </div>
 </div>
 </div>
@@ -52,11 +134,112 @@
 
 <div class="status" id="status"></div>
 </div>
+<!-- Менеджер личных плейлистов -->
+<div id="personal-playlists-manager-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:500px;">
+<button class="url-modal-close" onclick="closePersonalPlaylistsManager()">✕</button>
+<h2 style="margin:0 0 12px;">📚 Личные плейлисты</h2>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+<button onclick="openPersonalPlaylistEditor(null)" title="Новый плейлист" style="width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:#2a2a2a;color:var(--sub);font-size:16px;cursor:pointer;line-height:1;">+</button>
+<span style="color:var(--sub);font-size:12px;">Двойной клик по плейлисту — настройки</span>
+</div>
+<div id="personal-playlists-list" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+</div>
+</div>
+
+<!-- Редактор личного плейлиста -->
+<div id="personal-playlist-editor-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:900px;">
+<button class="url-modal-close" onclick="closePersonalPlaylistEditor()">✕</button>
+<h2 id="personal-pl-editor-title" style="margin:0 0 12px;">➕ Новый плейлист</h2>
+<div class="url-field"><label>Название</label><input type="text" id="personal-pl-name-input" placeholder="Название плейлиста"></div>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);margin:0 0 12px;cursor:pointer;"><input type="checkbox" id="personal-pl-autoshare"> Авто-добавление в комнату (📤)</label>
+<div class="pl-body" style="height:420px;">
+<div class="pl-col">
+<div class="pl-col-title">Все треки</div>
+<input type="text" id="personal-pl-all-search" placeholder="Поиск по названию..." oninput="renderPersonalEditorColumns()" style="flex-shrink:0;height:34px;margin:6px;width:calc(100% - 12px);box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:6px;padding:8px 10px;color:#eee;font-size:12px;outline:none;">
+<div id="personal-pl-all-tracks" class="pl-list"></div>
+</div>
+<div class="pl-col">
+<div class="pl-col-title">В плейлисте</div>
+<input type="text" id="personal-pl-sel-search" placeholder="Поиск по названию..." oninput="renderPersonalEditorColumns()" style="flex-shrink:0;height:34px;margin:6px;width:calc(100% - 12px);box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:6px;padding:8px 10px;color:#eee;font-size:12px;outline:none;">
+<div id="personal-pl-selected-tracks" class="pl-list"></div>
+</div>
+</div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+<button id="personal-pl-delete-btn" style="padding:10px 22px;border-radius:8px;border:none;background:var(--danger);color:white;font-weight:bold;cursor:pointer;margin-right:auto;display:none;" onclick="deleteCurrentPersonalPlaylist()">Удалить</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closePersonalPlaylistEditor()">Отмена</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:black;font-weight:bold;cursor:pointer;" onclick="savePersonalPlaylistEditor()">Сохранить</button>
+</div>
+</div>
+</div>
+
+<div id="my-music-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:640px;">
+<button class="url-modal-close" onclick="closeMyMusic()">✕</button>
+<h2 style="margin:0 0 14px;">📝 Моя музыка</h2>
+<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Двойной клик по треку — редактирование доступно в комнате.</div>
+<input type="text" id="my-music-search" placeholder="Поиск по названию или исполнителю..." oninput="renderStartMyMusic(this.value)" style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:8px;padding:9px 12px;color:#eee;font-size:14px;outline:none;margin-bottom:10px;">
+<div id="my-music-content" class="plv-content"></div>
+</div>
+</div>
+
+<style>
+#my-music-modal,#edit-track-modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:3000;}
+#my-music-modal.open,#edit-track-modal.open{display:flex;}
+#my-music-modal .plv-box,#edit-track-modal .url-modal-box{background:#1e1e1e;border:1px solid #3a3a3a;border-radius:14px;padding:22px;position:relative;max-width:94vw;max-height:88vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.6);}
+#my-music-modal .plv-box{width:640px;display:flex;flex-direction:column;}
+#edit-track-modal .url-modal-box{width:480px;}
+#my-music-modal h2,#edit-track-modal h2{margin:0 0 14px;font-size:20px;color:#fff;}
+.url-modal-close{position:absolute;top:12px;right:14px;background:none;border:none;color:#888;font-size:16px;cursor:pointer;padding:4px;line-height:1;}
+.url-modal-close:hover{color:#fff;}
+.plv-content{flex:1;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px;max-height:62vh;}
+.my-music-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:#242424;cursor:pointer;}
+.my-music-item:hover{background:#2a2a2a;}
+.my-music-item img{width:36px;height:36px;border-radius:6px;object-fit:cover;background:#333;}
+.my-music-item .mm-info{flex:1;min-width:0;}
+.my-music-item .mm-title{font-size:13px;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.my-music-item .mm-artist{font-size:11px;color:#888;}
+.my-music-item .mm-badge{font-size:10px;padding:2px 6px;border-radius:4px;background:#444;color:#bbb;flex-shrink:0;}
+.mm-del{background:none;border:none;color:#777;font-size:14px;cursor:pointer;padding:4px 6px;border-radius:6px;flex-shrink:0;}
+.mm-del:hover{color:#e74c3c;background:#333;}
+.url-field{margin-bottom:12px;}
+.url-field label{display:block;font-size:12px;color:#9a9a9a;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;}
+.url-field input[type="text"]{width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:8px;padding:9px 12px;color:#eee;font-size:14px;outline:none;}
+.url-field input[type="text"]:focus{border-color:#1db954;}
+#my-music-modal input[type="text"]{width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:8px;padding:9px 12px;color:#eee;font-size:14px;outline:none;margin-bottom:10px;}
+input[type="checkbox"]{-webkit-appearance:none;appearance:none;width:18px;height:18px;border:2px solid #555;border-radius:4px;background:transparent;cursor:pointer;position:relative;flex-shrink:0;transition:.15s;margin:0;vertical-align:middle;}
+input[type="checkbox"]:checked{background:#1db954;border-color:#1db954;}
+input[type="checkbox"]:checked::after{content:'';position:absolute;left:5px;top:1px;width:4px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+</style>
+
+<div id="my-music-modal" class="playlist-view-modal">
+<div class="plv-box" style="width:640px;">
+<button class="url-modal-close" onclick="closeMyMusic()">✕</button>
+<h2 style="margin:0 0 14px;">📝 Моя музыка</h2>
+<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Двойной клик по треку — редактирование. Изменения видны всем.</div>
+<input type="text" id="my-music-search" placeholder="Поиск по названию или исполнителю..." oninput="renderStartMyMusic(this.value)">
+<div id="my-music-content" class="plv-content"></div>
+</div>
+</div>
+
+<div id="edit-track-modal">
+<div class="url-modal-box">
+<button class="url-modal-close" onclick="closeStartEditTrack()">✕</button>
+<h2 id="set-title-modal">⚙ Редактирование</h2>
+<div id="set-fields"></div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:var(--sub);font-weight:bold;cursor:pointer;" onclick="closeStartEditTrack()">Отмена</button>
+<button style="padding:10px 22px;border-radius:8px;border:none;background:#1db954;color:black;font-weight:bold;cursor:pointer;" onclick="saveStartEditTrack()">Сохранить</button>
+</div>
+</div>
+</div>
 
 <script src="js/i18n.js"></script>
 <script src="js/helpers.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/start.js"></script>
 <script src="js/guide.js"></script>
+<script src="js/personal-playlists.js"></script>
 </body>
 </html>

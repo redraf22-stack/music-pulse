@@ -3,23 +3,42 @@ const urlParams=new URLSearchParams(window.location.search);
 const voiceUsers=new Set();
 socket.on('user-joined-voice',d=>{if(d&&d.id){voiceUsers.add(d.id);if(lastUsersList)renderUsersList(lastUsersList);}});
 socket.on('user-left-voice',d=>{if(d&&d.id){voiceUsers.delete(d.id);if(lastUsersList)renderUsersList(lastUsersList);}});
-function backToStart(){if(window.electronAPI&&window.electronAPI.goStart){window.electronAPI.goStart(currentLang);}else{window.location.replace('/');}}
+function backToStart(){try{if(window.electronAPI&&window.electronAPI.closeChatWindow)window.electronAPI.closeChatWindow();}catch(e){}if(window.electronAPI&&window.electronAPI.goStart){window.electronAPI.goStart(currentLang);}else{window.location.replace('/');}}
 const bootMode=urlParams.get('mode');
 const bootNick=(urlParams.get('nick')||'').trim();
 const bootCode=(urlParams.get('code')||'').trim().toUpperCase();
 let techOpen=false,voteOpen=false;
+let autoRequestTracks=false;
 let prefsLock=true;
 function saveRoomPrefs(){if(myRole!=='admin'||prefsLock)return;try{localStorage.setItem('mp_room_prefs_'+myNickname,JSON.stringify({lanOpen:isLanOpen,voiceEnabled:voiceChatEnabled,voteCooldown:voteCooldown,voteDuration:voteDuration}));}catch(e){}}
 function applyRoomPrefs(){if(myRole!=='admin')return;try{const p=JSON.parse(localStorage.getItem('mp_room_prefs_'+myNickname)||'null');if(!p)return;if(p.lanOpen&&!isLanOpen)socket.emit('toggle-lan');if(p.voiceEnabled&&!voiceChatEnabled)socket.emit('toggle-voice-chat',true);if((p.voteCooldown!==undefined&&p.voteCooldown!==voteCooldown)||(p.voteDuration!==undefined&&p.voteDuration!==voteDuration))socket.emit('update-settings',{voteCooldown:p.voteCooldown!==undefined?p.voteCooldown:voteCooldown,voteDuration:p.voteDuration!==undefined?p.voteDuration:voteDuration});}catch(e){}}
 function toggleTechSettings(){techOpen=!techOpen;const b=document.getElementById('tech-settings-btn');const p=document.getElementById('tech-settings-panel');if(b)b.classList.toggle('open',techOpen);if(p)p.style.display=techOpen?'flex':'none';if(!techOpen){voteOpen=false;const vb=document.getElementById('vote-settings-btn');const vp=document.getElementById('admin-controls');if(vb)vb.classList.remove('open');if(vp)vp.style.display='none';}}
 function toggleVoteSettings(){if(myRole!=='admin')return;voteOpen=!voteOpen;const b=document.getElementById('vote-settings-btn');const p=document.getElementById('admin-controls');if(b)b.classList.toggle('open',voteOpen);if(p)p.style.display=voteOpen?'block':'none';}
+function toggleAutoRequest(){
+autoRequestTracks=!autoRequestTracks;
+const b=document.getElementById('auto-request-btn');
+if(b)b.classList.toggle('active',autoRequestTracks);
+localStorage.setItem('mp_auto_request',autoRequestTracks?'1':'0');
+if(autoRequestTracks&&currentRoomCode){
+// Сразу отправляем запросы всем
+(lastUsersList||[]).forEach(u=>{
+if(u.id!==mySocketId&&u.name!==myNickname){
+socket.emit('request-share',u.name);
+}
+});
+showToast('📥 Авто-запрос включён');
+}else{
+showToast('📥 Авто-запрос выключен');
+}
+}
 
 let booted=false;
 function bootstrap(){
 if(bootMode==='create'&&bootNick){
 myNickname=bootNick;
 myNickname=bootNick;localStorage.setItem('mp_nickname',bootNick);
-socket.emit('create-room',bootNick,function(d){
+const bootOffline=urlParams.get('offline')==='1';
+socket.emit('create-room',{nickname:bootNick,offline:bootOffline},function(d){
 if(d&&d.code){history.replaceState(null,'','/room?mode=join&code='+d.code+'&nick='+encodeURIComponent(bootNick));enterRoom(d);applyRoomPrefs();}
 else{showAlert('⚠️',translate('leave_room_title'),translate('boot_error'));setTimeout(backToStart,1500);}
 });
@@ -54,6 +73,21 @@ updateVoiceEntryButton();updateManageBtnVisibility();updateRegenBtnVisibility();
 const sv=localStorage.getItem('mp_master_volume');if(sv!==null&&typeof audio!=='undefined'){audio.volume=parseFloat(sv);}
 socket.emit('get-active-streams');
 socket.emit('get-playlists');
+if(window.electronAPI&&typeof publishPersonalShare==='function'){setTimeout(()=>publishPersonalShare(),1500);}
+// Восстанавливаем настройку автозапроса
+autoRequestTracks=localStorage.getItem('mp_auto_request')==='1';
+const arb=document.getElementById('auto-request-btn');
+if(arb)arb.classList.toggle('active',autoRequestTracks);
+// Автоматический запрос треков при входе
+if(autoRequestTracks){
+setTimeout(()=>{
+(lastUsersList||[]).forEach(u=>{
+if(u.id!==mySocketId&&u.name!==myNickname){
+socket.emit('request-share',u.name);
+}
+});
+},2000);
+}
 renderPlaylistBar();
 }
 function leaveRoom(){
@@ -123,7 +157,9 @@ if(hasScreen)vdHTML+='<div class="screen-dot" title="Экран включен">
 div.innerHTML=`<div class="user-top-row"><span class="user-name">${escapeHtml(icon)}${escapeHtml(displayName)}</span>${vdHTML}<div class="user-actions">${actionsHTML}${voiceBtns}</div></div>`;
 if(isInVoice&&u.id!==mySocketId&&hasVoice){
 const pid=socketToPeer[u.id];
-const sv=pid&&localVolumes[pid]!==undefined?localVolumes[pid]:0.5;
+let sv=pid&&localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
+if(sv===undefined){const saved=getUserVol(u);if(saved!==undefined){sv=saved;if(pid)localVolumes[pid]=sv;}}
+if(sv===undefined)sv=0.5;
 const pv=Math.round(sv*200);
 const row=document.createElement('div');row.className='user-volume-row';
 const lbl=document.createElement('span');lbl.className='vol-label';lbl.textContent='🔊';row.appendChild(lbl);
@@ -166,20 +202,8 @@ let roomPlaylists=[],activePlaylistId='classic',viewPlaylistId='classic',plEdit=
 let plCurrentNick='';
 socket.on('share-requested',d=>{
 const name=(d&&d.requester)||'Админ';
-showConfirm('📤',translate('share_request_title'),translate('share_request_msg',{name:name}),async()=>{
-if(!window.electronAPI||!window.electronAPI.startMusicShare){showToast('Доступно только в приложении',true);return;}
-try{
-const s=await window.electronAPI.startMusicShare();
-if(s&&s.ok){
-const ip=await window.electronAPI.getLanIp();
-const r=await fetch('http://localhost:'+s.port+'/list.json');
-const list=await r.json();
-socket.emit('share-music',{base:'http://'+ip+':'+s.port,tracks:list});
-window.iSharedMusic=true;
-showToast('📤 Музыка в комнате: '+list.length+' треков');
-}else showToast('📤 Не удалось поднять сервер музыки',true);
-}catch(e){showToast('📤 Ошибка загрузки: '+e.message,true);}
-});
+if(typeof openShareSelectModal==='function')openShareSelectModal(name);
+else showToast('📤 Запрос треков от: '+name);
 });
 socket.on('shared-music-update',d=>{
 if(d.removed){
@@ -206,32 +230,22 @@ document.querySelectorAll('.pl-arrow').forEach(b=>{b.style.display=(roomPlaylist
 function viewPlaylist(dir){if(!roomPlaylists.length)return;let i=roomPlaylists.findIndex(p=>p.id===viewPlaylistId);if(i<0)i=0;i=(i+dir+roomPlaylists.length)%roomPlaylists.length;viewPlaylistId=roomPlaylists[i].id;renderPlaylistBar();}
 function selectPlaylist(){if(myRole==='admin'||isMod){socket.emit('set-playlist',viewPlaylistId);}else{openPlaylistView();}}
 function createPlaylist(){socket.emit('create-playlist');}
-function openPlaylistSettings(id){if(myRole!=='admin'&&!isMod)return;const pl=roomPlaylists.find(p=>p.id===(id||viewPlaylistId||activePlaylistId));if(!pl)return;plEdit=JSON.parse(JSON.stringify(pl));plEdit.excluded=plEdit.excluded||{};document.getElementById('pl-name-input').value=plEdit.name;document.getElementById('pl-name-input').disabled=!!plEdit.classic;const db=document.getElementById('pl-delete-btn');if(db)db.style.display=plEdit.classic?'none':'inline-block';document.getElementById('pl-tracks-col').style.display='none';renderPlUsers();document.getElementById('playlist-modal').classList.add('open');}
+function openPlaylistSettings(id){if(myRole!=='admin'&&!isMod)return;const pl=roomPlaylists.find(p=>p.id===(id||viewPlaylistId||activePlaylistId));if(!pl)return;plEdit=JSON.parse(JSON.stringify(pl));plEdit.excluded=plEdit.excluded||{};document.getElementById('pl-name-input').value=plEdit.name;document.getElementById('pl-name-input').disabled=!!plEdit.classic;const db=document.getElementById('pl-delete-btn');if(db)db.style.display=plEdit.classic?'none':'inline-block';renderPlUsers();document.getElementById('playlist-modal').classList.add('open');loadAllRoomTracks();}
 function closePlaylistSettings(){document.getElementById('playlist-modal').classList.remove('open');plEdit=null;}
 function renderPlUsers(){
 const list=document.getElementById('pl-users-list');list.innerHTML='';
 (lastUsersList||[]).forEach(u=>{
 const row=document.createElement('div');row.className='pl-user-row';
-const nm=document.createElement('span');nm.style.flex='1';nm.textContent=u.name;nm.ondblclick=()=>loadPlTracks(u.name);
+const nm=document.createElement('span');nm.style.flex='1';nm.textContent=u.name;nm.onclick=()=>openUserSharedPlaylists(u.name);
 const cb=document.createElement('input');cb.type='checkbox';cb.className='pl-checkbox';
-cb.checked=!!plEdit.includeAll[u.name];
-cb.onchange=async()=>{
-plEdit.includeAll[u.name]=cb.checked;
-const host=(lastUsersList||[]).find(x=>x.isAdmin);
-try{
-const r=await fetch('/api/user-tracks?nick='+encodeURIComponent(u.name)+'&host='+encodeURIComponent(host?host.name:'')+'&room='+encodeURIComponent(currentRoomCode));
-const d=await r.json();
-const keys=[...(d.local||[]).map(t=>'local|'+t.filename),...(d.urls||[]).map(t=>'url|'+u.name+'|'+t.id),...(d.shared||[]).map(t=>'shared|'+u.name+'|'+t.file)];
-if(cb.checked){keys.forEach(k=>{plEdit.selected[k]=true;});}
-else{keys.forEach(k=>{delete plEdit.selected[k];});}
-if(document.getElementById('pl-tracks-col').style.display!=='none'&&document.getElementById('pl-tracks-title').textContent==='Треки: '+u.name){loadPlTracks(u.name);}
-}catch(e){}
-};
+cb.checked=ownerHasSelected(u.name);
+cb.onchange=()=>{ownerSetAll(u.name,cb.checked);renderPlUsers();const q=(document.getElementById('pl-track-search')||{}).value||'';if(plColMode==='all')renderGlobalTracks(q);else if(plColMode==='tracks'&&plBrowseNick===u.name)renderSharedPlTracks(q);else if(plColMode==='playlists'&&plBrowseNick===u.name)renderSharedPlaylistsList(u.name,window._sharedPlList||[]);};
 row.appendChild(nm);row.appendChild(cb);list.appendChild(row);
 });
 }
 let plTracksData=null;
 async function loadPlTracks(nick){
+plBrowsePlaylist=null;
 const host=(lastUsersList||[]).find(u=>u.isAdmin);
 try{
 const r=await fetch('/api/user-tracks?nick='+encodeURIComponent(nick)+'&host='+encodeURIComponent(host?host.name:'')+'&room='+encodeURIComponent(currentRoomCode));
@@ -240,7 +254,9 @@ plTracksData={nick:nick,local:d.local||[],urls:d.urls||[],shared:d.shared||[]};
 plCurrentNick=nick;
 document.getElementById('pl-tracks-col').style.display='flex';
 document.getElementById('pl-tracks-title').textContent='Треки: '+nick;
+plColMode='tracks';document.getElementById('pl-back-btn').style.display='inline-block';
 const si=document.getElementById('pl-track-search');if(si)si.value='';
+si.style.display='';
 renderPlTracks('');
 }catch(e){showToast('Ошибка загрузки треков',true);}
 }
@@ -271,7 +287,7 @@ plTracksData.local.filter(t=>!f||(t.title||'').toLowerCase().includes(f)).forEac
 const h2=document.createElement('div');h2.className='pl-col-title';h2.textContent='URL';list.appendChild(h2);
 plTracksData.urls.filter(t=>!f||(t.title||'').toLowerCase().includes(f)).forEach(t=>mk(t,'url|'+nick+'|'+t.id,'🔗 '));
 }
-function savePlaylistSettings(){if(!plEdit)return;socket.emit('update-playlist',{id:plEdit.id,name:document.getElementById('pl-name-input').value.trim()||plEdit.name,includeAll:plEdit.includeAll,selected:plEdit.selected,excluded:plEdit.excluded});closePlaylistSettings();}
+function savePlaylistSettings(){if(!plEdit)return;socket.emit('update-playlist',{id:plEdit.id,name:document.getElementById('pl-name-input').value.trim()||plEdit.name,includeAll:{},selected:plEdit.selected,excluded:{}});closePlaylistSettings();}
 function deletePlaylist(){if(!plEdit||plEdit.classic)return;const id=plEdit.id;const name=plEdit.name;closePlaylistSettings();showConfirm('🗑','Удалить плейлист?','Плейлист «'+name+'» будет удалён.',()=>{socket.emit('delete-playlist',{id:id});});}
 function openPlaylistView(){
 socket.emit('get-playlist-view',function(groups){
@@ -359,4 +375,169 @@ return true;
 }
 }catch(e){}
 return false;
+}
+// ===== Просмотр переданных личных плейлистов участника =====
+let plBrowseNick=null,plBrowsePlaylist=null,plColMode='all';
+function plTracksSearch(v){if(plColMode==='all')renderGlobalTracks(v);else if(plColMode==='tracks')renderSharedPlTracks(v);}
+function plBack(){if(plColMode==='tracks'){openUserSharedPlaylists(plBrowseNick);}else if(plColMode==='playlists'){loadAllRoomTracks();}}
+function mkPlTrackRow(key,label,owner){
+const row=document.createElement('div');row.className='pl-user-row';
+const cb=document.createElement('input');cb.type='checkbox';cb.className='pl-checkbox';
+cb.checked=!!plEdit.selected[key];
+cb.onchange=()=>{if(cb.checked)plEdit.selected[key]=true;else delete plEdit.selected[key];if(owner)renderPlUsers();};
+const nm=document.createElement('span');nm.style.flex='1';nm.className='marquee-able';nm.textContent=label;enableMarquee(nm);
+row.appendChild(cb);row.appendChild(nm);
+if(owner){const b=document.createElement('span');b.style.fontSize='10px';b.style.color='var(--sub)';b.textContent=owner;row.appendChild(b);}
+return row;
+}
+function loadAllRoomTracks(){
+plColMode='all';plBrowseNick=null;plBrowsePlaylist=null;
+document.getElementById('pl-tracks-col').style.display='flex';
+document.getElementById('pl-back-btn').style.display='none';
+document.getElementById('pl-tracks-title').textContent='Все треки комнаты';
+const si=document.getElementById('pl-track-search');si.style.display='';const sr=document.getElementById('pl-sort-row');if(sr)sr.style.display='flex';si.value='';
+socket.emit('get-room-tracks-all',function(list){window._allRoomTracks=list||[];migrateIncludeAllToSelected();renderPlUsers();renderGlobalTracks('');});
+}
+function renderGlobalTracks(f){
+if(!plEdit)return;
+const listEl=document.getElementById('pl-tracks-list');listEl.innerHTML='';
+const q=(f||'').toLowerCase().trim();
+plApplySort(window._allRoomTracks||[]).forEach(t=>{
+if(q&&!((t.title||'')+' '+(t.artist||'')+' '+(t.owner||'')).toLowerCase().includes(q))return;
+listEl.appendChild(mkPlTrackRow(t.key,(t.title||'')+(t.artist?' — '+t.artist:''),t.owner));
+});
+if(!listEl.children.length)listEl.innerHTML='<div style="color:var(--sub);font-size:12px;padding:10px;text-align:center;">Ничего не найдено</div>';
+}
+async function openUserSharedPlaylists(nick){
+const isHostMe=(location.hostname==='localhost'||location.hostname==='127.0.0.1')&&nick===myNickname&&typeof getPersonalPlaylists==='function';
+if(isHostMe){
+window._sharedMode='local';
+const all=await getLocalShareList();
+let myUrls=[];try{myUrls=(await window.loadMyTracks(currentRoomCode||'')).filter(t=>t.type==='url');}catch(e){}
+const pls=getPersonalPlaylists().map(p=>({id:p.id,name:p.classic?'Все песни':p.name,classic:!!p.classic,
+files:p.classic?all.map(t=>t.file):(p.tracks||[]).filter(t=>t.type==='local').map(t=>t.filename),
+urls:p.classic?myUrls.map(t=>t.id||t.url):(p.tracks||[]).filter(t=>t.type==='url').map(t=>t.id||t.url)}));
+renderSharedPlaylistsList(nick,pls);
+return;
+}
+window._sharedMode='shared';
+socket.emit('get-shared-playlists',nick,function(list){
+if(!list||!list.length){loadPlTracks(nick);return;}
+renderSharedPlaylistsList(nick,list);
+});
+}
+function renderSharedPlaylistsList(nick,list){
+plColMode='playlists';plBrowseNick=nick;plBrowsePlaylist=null;
+window._sharedPlList=list;
+document.getElementById('pl-tracks-col').style.display='flex';
+document.getElementById('pl-back-btn').style.display='inline-block';
+document.getElementById('pl-tracks-title').textContent='Плейлисты: '+nick;
+document.getElementById('pl-track-search').style.display='none';
+const sr=document.getElementById('pl-sort-row');if(sr)sr.style.display='none';
+const listEl=document.getElementById('pl-tracks-list');listEl.innerHTML='';
+list.forEach(p=>{
+const keys=plKeysForPlaylist(nick,p);
+const allSel=keys.length>0&&keys.some(k=>plEdit.selected[k]);
+const row=document.createElement('div');row.className='pl-user-row';row.style.cursor='pointer';
+const cb=document.createElement('input');cb.type='checkbox';cb.className='pl-checkbox';
+cb.checked=allSel;
+cb.onchange=()=>{keys.forEach(k=>{if(cb.checked)plEdit.selected[k]=true;else delete plEdit.selected[k];});renderPlUsers();renderSharedPlaylistsList(nick,list);};
+cb.onclick=e=>e.stopPropagation();
+row.appendChild(cb);
+const nm2=document.createElement('span');nm2.style.flex='1';nm2.className='marquee-able';nm2.textContent='📚 '+p.name;enableMarquee(nm2);
+const cnt=document.createElement('span');cnt.style.color='var(--sub)';cnt.style.fontSize='11px';cnt.textContent=(p.count!==undefined?p.count:((p.files||[]).length+(p.urls||[]).length))+' треков';
+row.appendChild(nm2);row.appendChild(cnt);
+row.onclick=()=>loadSharedPlaylistTracks(nick,p.id);
+listEl.appendChild(row);
+});
+if(!listEl.children.length)listEl.innerHTML='<div style="color:var(--sub);font-size:12px;padding:10px;text-align:center;">Нет переданных плейлистов</div>';
+}
+function loadSharedPlaylistTracks(nick,plId){
+const meta=(window._sharedPlMeta||{})[plId];
+if(window._sharedMode==='local'){
+(async()=>{
+let tracks=[];
+const plRec=(getPersonalPlaylists().find(p=>p.id===plId)||{tracks:[]});
+if(plRec.classic){
+const all=await getLocalShareList();
+tracks=all.map(t=>({type:'local',file:t.file,title:t.title,artist:t.artist}));
+try{const mine=await window.loadMyTracks(currentRoomCode||'');mine.filter(t=>t.type==='url').forEach(t=>tracks.push({type:'url',id:t.id||t.url,url:t.url||'',title:t.title,artist:(t.artist&&t.artist.name)||t.artist,cover:t.cover||''}));}catch(e){}
+}else{
+(plRec.tracks||[]).filter(t=>t.type==='local').forEach(t=>tracks.push({type:'local',file:t.filename,title:t.title,artist:t.artist}));
+(plRec.tracks||[]).filter(t=>t.type==='url').forEach(t=>tracks.push({type:'url',id:t.id||t.url,url:t.url||'',title:t.title,artist:t.artist,cover:t.cover||''}));
+}
+window._sharedPlTracks=tracks;
+showSharedTracksView(nick,plRec.name||meta?.name||plId);
+})();
+return;
+}
+socket.emit('get-shared-playlist-tracks',{nick:nick,id:plId},function(data){
+window._sharedPlTracks=data.tracks||[];
+showSharedTracksView(nick,data.name||plId);
+});
+}
+function showSharedTracksView(nick,name){
+plColMode='tracks';plBrowseNick=nick;plBrowsePlaylist=nick+'|'+name;
+document.getElementById('pl-tracks-title').textContent='Треки: '+name;
+const si=document.getElementById('pl-track-search');si.style.display='';const sr=document.getElementById('pl-sort-row');if(sr)sr.style.display='flex';si.value='';
+document.getElementById('pl-back-btn').style.display='inline-block';
+renderSharedPlTracks('');
+}
+function renderSharedPlTracks(filter){
+if(!plEdit)return;
+const nick=plBrowseNick;
+const f=(filter||'').toLowerCase().trim();
+const listEl=document.getElementById('pl-tracks-list');listEl.innerHTML='';
+plApplySort(window._sharedPlTracks||[]).forEach(t=>{
+if(f&&!((t.title||'')+' '+(t.artist||'')).toLowerCase().includes(f))return;
+let key,label;
+if(t.type==='url'){key='url|'+nick+'|'+(t.id||t.url);label='🔗 '+(t.title||'')+(t.artist?' — '+t.artist:'');}
+else if(window._sharedMode==='local'){key='local|'+(t.file||t.filename);label='💾 '+(t.title||t.file||t.filename)+(t.artist?' — '+t.artist:'');}
+else{key='shared|'+nick+'|'+t.file;label='📤 '+(t.title||t.file)+(t.artist?' — '+t.artist:'');}
+listEl.appendChild(mkPlTrackRow(key,label,null));
+});
+if(!listEl.children.length)listEl.innerHTML='<div style="color:var(--sub);font-size:12px;padding:10px;text-align:center;">Пусто</div>';
+}
+function ownerKeys(nick){return (window._allRoomTracks||[]).filter(t=>t.owner===nick).map(t=>t.key);}
+function ownerHasSelected(nick){return ownerKeys(nick).some(k=>plEdit&&plEdit.selected[k]);}
+function ownerSetAll(nick,on){ownerKeys(nick).forEach(k=>{if(on)plEdit.selected[k]=true;else delete plEdit.selected[k];});}
+function plKeysForPlaylist(nick,p){const mode=window._sharedMode;const ks=[];(p.files||[]).forEach(f=>ks.push(mode==='local'?('local|'+f):('shared|'+nick+'|'+f)));(p.urls||[]).forEach(u=>ks.push('url|'+nick+'|'+u));return ks;}
+function migrateIncludeAllToSelected(){if(!plEdit||!plEdit.includeAll)return;Object.keys(plEdit.includeAll).forEach(n=>{if(plEdit.includeAll[n]){ownerKeys(n).forEach(k=>{if(!plEdit.excluded[k])plEdit.selected[k]=true;else delete plEdit.selected[k];});plEdit.includeAll[n]=false;}});}
+function refreshPlColumns(){renderPlUsers(lastUsersList||[]);if(window._sharedPlList&&plBrowseNick)renderSharedPlaylistsList(plBrowseNick,window._sharedPlList);}
+function enableMarquee(span){
+span.addEventListener('mouseenter',()=>{
+if(span.dataset.mqBusy)return;
+if(span.scrollWidth<=span.clientWidth+2)return;
+const text=span.dataset.mqText!==undefined?span.dataset.mqText:span.textContent;
+span.dataset.mqText=text;
+span.classList.add('marquee-on');
+span.innerHTML='';
+const inner=document.createElement('span');inner.className='mq-inner';
+const c1=document.createElement('span');c1.className='mq-copy';c1.textContent=text;
+const c2=document.createElement('span');c2.className='mq-copy';c2.textContent=text;
+inner.appendChild(c1);inner.appendChild(c2);span.appendChild(inner);
+const w=c1.offsetWidth;
+span.style.setProperty('--shift','-'+w+'px');
+span.style.setProperty('--dur',Math.max(3,w/50)+'s');
+});
+span.addEventListener('mouseleave',()=>{
+if(span.dataset.mqText!==undefined){span.textContent=span.dataset.mqText;span.classList.remove('marquee-on');}
+});
+}
+let plSortField=null,plSortDir=1;
+function plSortBy(f){
+if(plSortField===f)plSortDir*=-1;else{plSortField=f;plSortDir=1;}
+const lbl={title:'Назв.',artist:'Автор',owner:'Ник'};
+['title','artist','owner'].forEach(x=>{const b=document.getElementById('pl-sort-'+x);if(b)b.textContent=lbl[x]+(plSortField===x?(plSortDir>0?' ↑':' ↓'):'');});
+const q=(document.getElementById('pl-track-search')||{}).value||'';
+if(plColMode==='all')renderGlobalTracks(q);else if(plColMode==='tracks')renderSharedPlTracks(q);
+}
+function plApplySort(arr){
+if(!plSortField)return arr;
+return arr.slice().sort((a,b)=>{
+let va=a[plSortField]||'';let vb=b[plSortField]||'';
+if(plSortField==='artist'){va=va||a.title||'';vb=vb||b.title||'';}
+va=String(va).toLowerCase();vb=String(vb).toLowerCase();
+if(va<vb)return -plSortDir;if(va>vb)return plSortDir;return 0;
+});
 }

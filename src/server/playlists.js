@@ -27,11 +27,12 @@ async function embeddedCover(filename){
     try { fs.writeFileSync(EMB_FILE, JSON.stringify(cache)); } catch (e) {}
     return url;
 }
-async function resolveLocalCover(t) {
+async function resolveLocalCover(t, allowNet) {
+    if (allowNet === undefined) allowNet = true;
     const o = loadOverrides()[t.filename] || {};
-    if ('cover' in o) { if (o.cover) return o.cover; return await utils.findCover(t.title, t.artist); }
+    if ('cover' in o) { if (o.cover) return o.cover; return allowNet ? await utils.findCover(t.title, t.artist) : ''; }
     if (t.cover) return t.cover;
-    return (await embeddedCover(t.filename)) || await utils.findCover(t.title, t.artist);
+    return (await embeddedCover(t.filename)) || (allowNet ? await utils.findCover(t.title, t.artist) : '');
 }
 function replaceOverride(filename, data){ const o = loadOverrides(); o[filename] = Object.assign({}, data); fs.writeFileSync(OVR_FILE, JSON.stringify(o, null, 2)); }
 function loadOverrides(){ try { return JSON.parse(fs.readFileSync(OVR_FILE, 'utf8')); } catch (e) { return {}; } }
@@ -58,18 +59,19 @@ async function resolveTracks(room, withCovers) {
     const pushLocal = t => { const k = keyOfLocal(t); if (pl.excluded[k] && !pl.selected[k]) return; if (seen.has(k)) return; seen.add(k); out.push({ key: k, owner: host, title: t.title, artist: (typeof t.artist === 'string' ? { name: t.artist } : t.artist) || { name: 'Unknown Artist' }, filename: t.filename, preview: '/local-file?p=' + encodeURIComponent(t.filename), isLocal: true, isUrl: false, cover: t.cover || '', duration: Math.floor(t.duration || 30) }); };
     const pushUrl = (t, nick) => { const k = keyOfUrl(t, nick); if (pl.excluded[k] && !pl.selected[k]) return; if (seen.has(k)) return; seen.add(k); out.push({ key: k, owner: nick, title: t.title, artist: (typeof t.artist === 'string' ? { name: t.artist } : t.artist) || { name: 'Unknown Artist' }, id: t.id, rawUrl: t.url, autoCover: t.autoCover, coverSaved: t.cover || '', preview: t.preview || ('/url-proxy?url=' + encodeURIComponent(t.url)), isLocal: true, isUrl: true, duration: 0 }); };
     const pushShared = (t, nick) => { const k = 'shared|' + nick + '|' + t.file; if (pl.excluded[k] && !pl.selected[k]) return; if (seen.has(k)) return; seen.add(k); const sh = (room.sharedMusic || {})[nick] || {}; const o = ovr[k] || {}; out.push({ key: k, owner: nick, title: o.title || t.title, artist: o.artist ? { name: o.artist } : (t.artist ? (typeof t.artist === 'string' ? { name: t.artist } : t.artist) : { name: 'Unknown Artist' }), preview: '/url-proxy?url=' + encodeURIComponent((sh.base || '') + '/' + encodeURIComponent(t.file)), isLocal: true, isUrl: false, isShared: true, autoCover: !(o.cover || t.cover), coverSaved: o.cover || t.cover || '', duration: 0 }); };
-    Object.keys(pl.includeAll || {}).forEach(n => { if (!pl.includeAll[n]) return; if (n === host) local.forEach(pushLocal); urltracks.listFor(n).forEach(t => pushUrl(t, n)); if (n !== host) (((room.sharedMusic || {})[n]) || { tracks: [] }).tracks.forEach(t => pushShared(t, n)); });
+    const OFF=!!room.offline;
+Object.keys(pl.includeAll || {}).forEach(n => { if (!pl.includeAll[n]) return; if (n === host) local.forEach(pushLocal); if (!OFF) urltracks.listFor(n).forEach(t => pushUrl(t, n)); if (n !== host) { const sm = ((room.sharedMusic || {})[n]) || {}; (sm.tracks || []).forEach(t => pushShared(t, n)); if (!OFF) (sm.urls || []).forEach(t => pushUrl(t, n)); } });
     Object.keys(pl.selected || {}).forEach(k => {
         if (!pl.selected[k] || seen.has(k)) return;
         const parts = k.split('|');
         if (parts[0] === 'local') { const t = local.find(x => x.filename === parts.slice(1).join('|')); if (t) pushLocal(t); }
-        else if (parts[0] === 'url') { const nick = parts[1]; const t = urltracks.listFor(nick).find(x => x.id === parts.slice(2).join('|')); if (t) pushUrl(t, nick); }
+        else if (parts[0] === 'url') { if (OFF) return; const nick = parts[1]; let t = urltracks.listFor(nick).find(x => x.id === parts.slice(2).join('|')); if (!t && nick !== host) { const sm = (room.sharedMusic || {})[nick]; t = sm && (sm.urls || []).find(x => (x.id || x.url) === parts.slice(2).join('|')); } if (t) pushUrl(t, nick); }
         else if (parts[0] === 'shared') { const nick = parts[1]; const sh = (room.sharedMusic || {})[nick]; const t = sh && sh.tracks.find(x => x.file === parts.slice(2).join('|')); if (t) pushShared(t, nick); }
     });
     if (withCovers) await Promise.all(out.map(async tr => {
     if (tr.isUrl) { tr.cover = tr.autoCover ? await utils.findCover(tr.title, tr.artist) : (tr.coverSaved || ''); return; }
     if (tr.isShared) { tr.cover = tr.coverSaved || await utils.findCover(tr.title, tr.artist); return; }
-    tr.cover = await resolveLocalCover(tr);
+    tr.cover = await resolveLocalCover(tr, !OFF);
 }));
     return out;
 }

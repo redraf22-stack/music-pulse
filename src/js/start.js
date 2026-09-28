@@ -16,15 +16,40 @@ function showStatus(m,isErr){const el=document.getElementById('status');if(!el)r
 window.showStatus=showStatus;
 
 // ✅ Создание комнаты (Electron + язык)
+async function netOk(){
+if(!navigator.onLine)return false;
+try{const c=new AbortController();const t=setTimeout(()=>c.abort(),2000);
+await fetch('https://api.deezer.com/search?q=test&limit=1',{mode:'no-cors',signal:c.signal});clearTimeout(t);return true;}
+catch(e){return false;}
+}
+function offerOfflineDialog(n){
+const ov=document.createElement('div');ov.id='offline-offer';
+ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:5000;display:flex;align-items:center;justify-content:center;';
+ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px;max-width:440px;width:92%;position:relative;box-shadow:0 12px 40px rgba(0,0,0,.6);text-align:left;">
+<button id="oo-x" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#888;font-size:18px;cursor:pointer;">✕</button>
+<div style="font-size:20px;font-weight:bold;margin-bottom:10px;">📡 Нет соединения</div>
+<div style="color:var(--sub);font-size:13px;line-height:1.55;margin-bottom:18px;">Похоже, интернета нет. Можно создать <b>локальную комнату</b>: в ней не будет 30‑секундных превью Deezer, обложек из интернета и url‑песен, и к ней не смогут присоединиться друзья по коду. Локальные файлы из твоей папки будут работать.</div>
+<div style="display:flex;flex-direction:column;gap:8px;">
+<button id="oo-local" class="primary" style="width:100%;padding:12px;">Создать локальную комнату</button>
+<button id="oo-retry" class="secondary" style="width:100%;padding:12px;">Попробовать ещё раз</button>
+</div></div>`;
+document.body.appendChild(ov);
+const close=()=>ov.remove();
+document.getElementById('oo-x').onclick=close;
+document.getElementById('oo-retry').onclick=()=>{close();createRoom();};
+document.getElementById('oo-local').onclick=()=>{close();showStatus('Создаю локальную комнату…',false);window.electronAPI.startServerAndCreate(n,currentLang(),true).then(r=>{if(r&&!r.success)showStatus('Ошибка: '+(r.error||'неизвестная'),true);});};
+}
 window.createRoom=function(){
     const n=saveNick();
     if(!n)return showAlert('⚠️',translate('err_title'),translate('nickname_ph'));
     nickAC.addToHistory(n);
     if(window.electronAPI){
+        if(navigator.onLine===false){offerOfflineDialog(n);return;}
         showStatus(translate('connecting'),false);
-        window.electronAPI.startServerAndCreate(n,currentLang()).then(function(r){
+        window.electronAPI.startServerAndCreate(n,currentLang(),false).then(function(r){
             if(r&&!r.success)showStatus('Ошибка: '+(r.error||'неизвестная'),true);
         });
+        netOk().then(ok=>{if(!ok)showToast(translate('no_internet_toast'),true);}).catch(()=>{});
     }else{
         window.location.href='/room?mode=create&nick='+encodeURIComponent(n)+'&lang='+encodeURIComponent(currentLang());
     }
