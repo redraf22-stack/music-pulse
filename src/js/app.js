@@ -73,7 +73,7 @@ updateVoiceEntryButton();updateManageBtnVisibility();updateRegenBtnVisibility();
 const sv=localStorage.getItem('mp_master_volume');if(sv!==null&&typeof audio!=='undefined'){audio.volume=parseFloat(sv);}
 socket.emit('get-active-streams');
 socket.emit('get-playlists');
-if(window.electronAPI&&typeof publishPersonalShare==='function'){setTimeout(()=>publishPersonalShare(),1500);}
+if(window.electronAPI&&typeof publishPersonalShare==='function'){const _c=window._shareConfirmed&&window._shareConfirmed[currentRoomCode];if(_c&&_c.length)setTimeout(()=>publishPersonalShare(_c),1500);}
 // Восстанавливаем настройку автозапроса
 autoRequestTracks=localStorage.getItem('mp_auto_request')==='1';
 const arb=document.getElementById('auto-request-btn');
@@ -237,10 +237,12 @@ const list=document.getElementById('pl-users-list');list.innerHTML='';
 (lastUsersList||[]).forEach(u=>{
 const row=document.createElement('div');row.className='pl-user-row';
 const nm=document.createElement('span');nm.style.flex='1';nm.textContent=u.name;nm.onclick=()=>openUserSharedPlaylists(u.name);
+let req=null;
+if(!u.isAdmin&&u.name!==myNickname){req=document.createElement('button');req.className='pl-req-btn';req.type='button';req.title='Запросить треки у '+u.name;req.textContent='📤';req.onclick=(e)=>{e.stopPropagation();socket.emit('request-share',u.name);showToast('📤 Запрос отправлен: '+u.name);};}
 const cb=document.createElement('input');cb.type='checkbox';cb.className='pl-checkbox';
 cb.checked=ownerHasSelected(u.name);
 cb.onchange=()=>{ownerSetAll(u.name,cb.checked);renderPlUsers();const q=(document.getElementById('pl-track-search')||{}).value||'';if(plColMode==='all')renderGlobalTracks(q);else if(plColMode==='tracks'&&plBrowseNick===u.name)renderSharedPlTracks(q);else if(plColMode==='playlists'&&plBrowseNick===u.name)renderSharedPlaylistsList(u.name,window._sharedPlList||[]);};
-row.appendChild(nm);row.appendChild(cb);list.appendChild(row);
+row.appendChild(nm);if(req)row.appendChild(req);row.appendChild(cb);list.appendChild(row);
 });
 }
 let plTracksData=null;
@@ -541,3 +543,27 @@ va=String(va).toLowerCase();vb=String(vb).toLowerCase();
 if(va<vb)return -plSortDir;if(va>vb)return plSortDir;return 0;
 });
 }
+window.openShareSelectModal=function(requester){
+if(document.getElementById('share-select-modal'))return;
+let pls=[];try{pls=getPersonalPlaylists()||[];}catch(e){pls=[];}
+const ov=document.createElement('div');ov.id='share-select-modal';
+ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:4500;display:flex;align-items:center;justify-content:center;';
+const conf=(window._shareConfirmed&&window._shareConfirmed[currentRoomCode])||null;
+const rows=pls.map(p=>{const cnt=p.classic?'все треки':((p.tracks||[]).length+' треков');const on=conf?conf.indexOf(p.id)>=0:!!p.autoShare;const chk=on?' checked':'';
+return '<label class="ssm-row"><input type="checkbox" class="ssm-cb" data-id="'+escapeHtml(p.id)+'"'+chk+'><span class="ssm-nm">'+escapeHtml(p.classic?'📚 Все песни':p.name)+'</span><span class="ssm-ct">'+escapeHtml(cnt)+'</span></label>';}).join('');
+ov.innerHTML='<div class="ssm-box"><div class="ssm-h">📤 '+(requester||'Админ')+' просит передать твои треки</div>'
++'<div class="ssm-sub">Отметь плейлисты, которые разрешаешь видеть в комнате. Снятие отметки не трогает уже переданное до этого запроса.</div>'
++(rows?'<div class="ssm-list">'+rows+'</div>':'<div class="ssm-empty">Личных плейлистов пока нет — добавь их в ⚙ → Личные плейлисты.</div>')
++'<div class="ssm-btns"><button class="ssm-no" id="ssm-no">Отказаться</button><button class="ssm-yes" id="ssm-yes">Передать выбранное</button></div></div>';
+const st=document.createElement('style');st.textContent='#share-select-modal .ssm-box{background:#1e1e1e;border:1px solid #3a3a3a;border-radius:14px;padding:22px;width:460px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.6);}#share-select-modal .ssm-h{font-size:17px;font-weight:bold;color:#fff;margin-bottom:6px;}#share-select-modal .ssm-sub{font-size:12px;color:#9a9a9a;line-height:1.5;margin-bottom:12px;}#share-select-modal .ssm-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}#share-select-modal .ssm-row{display:flex;align-items:center;gap:10px;background:#242424;border:1px solid #333;border-radius:8px;padding:10px 12px;cursor:pointer;}#share-select-modal .ssm-row:hover{background:#2a2a2a;}#share-select-modal .ssm-nm{flex:1;font-size:13px;color:#eee;}#share-select-modal .ssm-ct{font-size:11px;color:#888;}#share-select-modal .ssm-empty{color:#777;font-style:italic;text-align:center;padding:18px 0;font-size:13px;}#share-select-modal .ssm-btns{display:flex;gap:10px;justify-content:flex-end;}#share-select-modal .ssm-no{padding:10px 18px;border-radius:8px;border:none;background:#333;color:#b3b3b3;font-weight:bold;cursor:pointer;}#share-select-modal .ssm-no:hover{background:#3d3d3d;color:#fff;}#share-select-modal .ssm-yes{padding:10px 22px;border-radius:8px;border:none;background:#1db954;color:#000;font-weight:bold;cursor:pointer;}#share-select-modal .ssm-yes:hover{filter:brightness(1.1);}';
+document.head.appendChild(st);document.body.appendChild(ov);
+const close=()=>{ov.remove();st.remove();};
+document.getElementById('ssm-no').onclick=close; // «Отказаться» = ничего не слать, уже переданное не трогаем
+document.getElementById('ssm-yes').onclick=()=>{
+const ids=[...ov.querySelectorAll('.ssm-cb:checked')].map(c=>c.getAttribute('data-id'));
+close();
+if(!ids.length){showToast('Ничего не отмечено — передача отменена');return;}
+if(typeof window.publishPersonalShare==='function')window.publishPersonalShare(ids);
+};
+ov.addEventListener('click',e=>{if(e.target===ov)close();});
+};

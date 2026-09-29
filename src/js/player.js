@@ -1,11 +1,18 @@
 let serverTimeOffset=0;
-const SYNC_BUFFER_MS = 150; // Буфер для компенсации сетевых задержек
+const SYNC_BUFFER_MS = 400; // Буфер для компенсации сетевых задержек
+const _offsetSamples=[];
 function measureServerOffset(){
 if(!socket||!socket.connected)return;
 const t0=Date.now();
 socket.emit('time-sync',t0,function(serverNow){
 const t1=Date.now();
-serverTimeOffset=serverNow-(t0+(t1-t0)/2);
+const rt=t1-t0;
+if(rt>1500)return;
+const off=serverNow-(t0+rt/2);
+_offsetSamples.push(off);
+if(_offsetSamples.length>9)_offsetSamples.shift();
+const sorted=_offsetSamples.slice().sort((a,b)=>a-b);
+serverTimeOffset=sorted[Math.floor(sorted.length/2)];
 });
 }
 setInterval(measureServerOffset,5000);measureServerOffset();
@@ -75,20 +82,16 @@ audio.addEventListener('error',()=>{clearTimeout(_skipTimer);if(trackChanging&&a
 const onReady=()=>{
 if(_trackLoadAbort!==_ac)return;
 if(audio.readyState<2){setTimeout(onReady,100);return;}
-// Синхронизация с буфером
 const now=Date.now()+serverTimeOffset;
 const timeSinceStart=now-(syncStartedAt||now);
-const isAdminSource=(myRole==='admin'||isMod);
-// Источник всегда стартует свежий трек с 0 и без буфера; гости догоняют по timeSinceStart
-const targetPosition=isAdminSource?(state.currentTime||0):(timeSinceStart/1000);
-if(!isAdminSource&&targetPosition>SYNC_BUFFER_MS/1000&&audio.duration){
-try{audio.currentTime=Math.min(targetPosition,Math.max(0,audio.duration-0.1));}catch(e){}
-}
-const delay=isAdminSource?0:Math.max(0,SYNC_BUFFER_MS-timeSinceStart);
+const jumped=timeSinceStart>SYNC_BUFFER_MS;
+if(jumped&&audio.duration){try{audio.currentTime=Math.min(timeSinceStart/1000,Math.max(0,audio.duration-0.1));}catch(e){}}
+else{try{audio.currentTime=0;}catch(e){}}
+const delay=jumped?0:Math.max(0,SYNC_BUFFER_MS-timeSinceStart);
 if(state.playing&&isReady){
 setTimeout(()=>{
 audio.play().then(()=>{
-if(myRole==='admin'||isMod)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});
+if((myRole==='admin'||isMod)&&jumped)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});
 }).catch(()=>{});
 },delay);
 }else{audio.pause();}

@@ -187,15 +187,16 @@ window._plLocalCache={time:now,list:list};
 return list;
 }catch(e){return [];}
 }
-async function publishPersonalShare(ids){
-if(typeof socket==='undefined'||!socket||!socket.connected)return false;
-await plStoreInit();
-const all=await getLocalShareList();
-const pls=getPersonalPlaylists();
-const selected=(ids&&ids.length)?pls.filter(p=>ids.includes(p.id)):pls.filter(p=>p.autoShare!==false);
-if(!selected.length)return false;
+window._shareConfirmed=window._shareConfirmed||{};
+window.publishPersonalShare=async function(forceIds){
+if(!(window.electronAPI&&typeof socket!=='undefined'&&socket&&socket.connected&&currentRoomCode))return;
+let all=[];try{all=await getLocalShareList();}catch(e){all=[];}
+let pls=[];try{pls=getPersonalPlaylists()||[];}catch(e){pls=[];}
+const explicit=Array.isArray(forceIds);
+const selected=explicit?pls.filter(p=>forceIds.indexOf(p.id)>=0):pls.filter(p=>p.autoShare);
+if(!explicit&&!selected.length){return;}
 const filesSet=new Set();const playlistsOut=[];
-let allUrls=[];try{allUrls=(await window.loadMyTracks(typeof currentRoomCode!=='undefined'?currentRoomCode:'')).filter(t=>t.type==='url');}catch(e){}
+let allUrls=[];try{allUrls=(await window.loadMyTracks(currentRoomCode||'')).filter(t=>t.type==='url');}catch(e){}
 const urlMap=new Map();
 selected.forEach(p=>{
 const files=p.classic?all.map(t=>t.file):(p.tracks||[]).filter(t=>t.type==='local'&&t.filename).map(t=>t.filename);
@@ -208,9 +209,13 @@ const tracks=all.filter(t=>filesSet.has(t.file));
 const urlsOut=[...urlMap.values()];
 let ip='127.0.0.1';try{ip=await window.electronAPI.getLanIp();}catch(e){}
 socket.emit('share-music',{base:'http://'+ip+':3005',tracks:tracks,urls:urlsOut,playlists:playlistsOut});
+window._shareConfirmed[currentRoomCode]=selected.map(p=>p.id);
 window.iSharedMusic=true;
-return true;
-}
+};
+// повторная отправка ТОГО ЖЕ подтверждённого набора (для живой синхронизации после правок)
+window.refreshShareIfActive=function(){
+try{const c=window._shareConfirmed&&window._shareConfirmed[currentRoomCode];if(c&&c.length&&typeof window.publishPersonalShare==='function')window.publishPersonalShare(c);}catch(e){}
+};
 async function openShareSelectModal(requester){
 await plStoreInit();
 const m=document.getElementById('share-select-modal');if(!m)return;
