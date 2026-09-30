@@ -191,7 +191,7 @@ window._shareConfirmed=window._shareConfirmed||{};
 window.publishPersonalShare=async function(forceIds){
 if(!(window.electronAPI&&typeof socket!=='undefined'&&socket&&socket.connected&&currentRoomCode))return;
 let all=[];try{all=await getLocalShareList();}catch(e){all=[];}
-let pls=[];try{pls=getPersonalPlaylists()||[];}catch(e){pls=[];}
+let pls=[];try{const r=window.electronAPI&&window.electronAPI.getPersonalPlaylists?await window.electronAPI.getPersonalPlaylists():null;pls=Array.isArray(r)?r:(Array.isArray(getPersonalPlaylists)?getPersonalPlaylists():(window._plCache||[]));}catch(e){pls=window._plCache||[];}
 const explicit=Array.isArray(forceIds);
 const selected=explicit?pls.filter(p=>forceIds.indexOf(p.id)>=0):pls.filter(p=>p.autoShare);
 if(!explicit&&!selected.length){return;}

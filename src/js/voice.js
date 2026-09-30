@@ -158,14 +158,21 @@ function handleAudioCall(c){
 console.log('[voice] handleAudioCall from', c.peer);
 currentCalls[c.peer]=c;
 c.on('stream',rs=>{
-console.log('[voice] stream received from', c.peer, 'tracks:', rs.getTracks().length);
-const ctx=getGlobalAudioContext();const pid=c.peer;
+const pid=c.peer;
 let sv=localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
 if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?getUserVol(u):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
 if(sv===undefined)sv=0.5;
-const ae=new Audio();ae.srcObject=rs;ae.volume=0;ae.muted=false;c._audioElement=ae;
-if(ctx&&ctx.state==='running'){try{const g=ctx.createGain();g.gain.value=volumeToGain(sv);const src=ctx.createMediaStreamSource(rs);src.connect(g);g.connect(ctx.destination);c._gainNode=g;c._sourceNode=src;}catch(e){console.error('[voice] audio graph error',e);}}
-ae.play().then(()=>console.log('[voice] audio playing from', pid)).catch(e=>console.error('[voice] play failed', pid, e));
+const ctx=getGlobalAudioContext();
+if(ctx&&ctx.state==='suspended'){try{ctx.resume();}catch(e){}}
+// Единственный путь звука — граф (gain до 200%). HTMLMediaElement НЕ создаём: его потребление того же потока конфликтовало с графом по clock'ам и давало джиттер/задержку приёма.
+try{
+const g=ctx.createGain();
+const base=volumeToGain(sv);
+g.gain.value=(forceDeafened||isDeafened)?0:base;
+const src=ctx.createMediaStreamSource(rs);
+src.connect(g);g.connect(ctx.destination);
+c._gainNode=g;c._sourceNode=src;c._baseGain=base;
+}catch(e){console.error('[voice] audio graph error',e);}
 startSpeakingDetection(pid,rs);
 });
 c.on('close',()=>{console.log('[voice] call closed', c.peer, 'reason:', c.closeReason || 'unknown');const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
@@ -388,9 +395,9 @@ document.addEventListener('mouseup',()=>{isResizing=false;});
 }
 function toggleMic(){if(!myStream||forceMuted){if(forceMuted)showToast(translate('force_muted'),true);return;}isMuted=!isMuted;myStream.getAudioTracks()[0].enabled=!isMuted;updateVoiceControlsInPlayer();syncSelfVoiceState();}
 function toggleDeafen(){if(forceDeafened){showToast(translate('force_deafened'),true);return;}isDeafened=!isDeafened;applyDeafenState();updateVoiceControlsInPlayer();syncSelfVoiceState();}
-function applyDeafenState(){const shouldBeDeafened=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._audioElement)c._audioElement.muted=shouldBeDeafened;});}
-socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){myStream.getAudioTracks()[0].enabled=!forceMuted&&!isMuted;}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;Object.values(currentCalls).forEach(c=>{if(c._shaperNode){try{if(forceDeafened)c._shaperNode.disconnect();else{const ctx=getGlobalAudioContext();if(ctx)c._shaperNode.connect(ctx.destination);}}catch(e){}}if(c._audioElement&&!c._shaperNode){c._audioElement.muted=forceDeafened||isDeafened;}});showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
-function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(getUserVolKey(u),val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(v);if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx&&ctx.state==='running'){c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);return;}}if(c._audioElement)c._audioElement.volume=Math.min(1,gv);}
+function applyDeafenState(){const d=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx)c._gainNode.gain.setTargetAtTime(d?0:(c._baseGain||volumeToGain(0.5)),ctx.currentTime,0.01);}else if(c._audioElement){c._audioElement.muted=d;}});}
+socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){myStream.getAudioTracks()[0].enabled=!forceMuted&&!isMuted;}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;applyDeafenState();showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
+function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(getUserVolKey(u),val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(val);c._baseGain=gv;if(c._gainNode&&!(forceDeafened||isDeafened)){const ctx=getGlobalAudioContext();if(ctx)c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);}}
 function onUserVolumeInput(sid,el,rng){let v=parseInt(el.value);if(isNaN(v)||v<0)v=0;if(v>200)v=200;el.value=v;const sv=v/200;if(rng)rng.value=sv;setLocalUserVolume(sid,sv);}
 function spinUserVolume(sid,delta,rng,inp){let v=parseInt(inp.value);if(isNaN(v))v=100;v+=delta;if(v<0)v=0;if(v>200)v=200;inp.value=v;onUserVolumeInput(sid,inp,rng);}
 socket.on('media-requested', async ({ requesterSocketId, requesterPeerId, type }) => {
