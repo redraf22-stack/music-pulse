@@ -9,8 +9,7 @@ const bootNick=(urlParams.get('nick')||'').trim();
 const bootCode=(urlParams.get('code')||'').trim().toUpperCase();
 let techOpen=false,voteOpen=false;
 let autoRequestTracks=false;
-let prefsLock=true;
-function saveRoomPrefs(){if(myRole!=='admin'||prefsLock)return;try{localStorage.setItem('mp_room_prefs_'+myNickname,JSON.stringify({lanOpen:isLanOpen,voiceEnabled:voiceChatEnabled,voteCooldown:voteCooldown,voteDuration:voteDuration}));}catch(e){}}
+function saveRoomPrefs(){if(myRole!=='admin')return;try{localStorage.setItem('mp_room_prefs_'+myNickname,JSON.stringify({lanOpen:isLanOpen,voiceEnabled:voiceChatEnabled,voteCooldown:voteCooldown,voteDuration:voteDuration}));}catch(e){}}
 function applyRoomPrefs(){if(myRole!=='admin')return;try{const p=JSON.parse(localStorage.getItem('mp_room_prefs_'+myNickname)||'null');if(!p)return;if(p.lanOpen&&!isLanOpen)socket.emit('toggle-lan');if(p.voiceEnabled&&!voiceChatEnabled)socket.emit('toggle-voice-chat',true);if((p.voteCooldown!==undefined&&p.voteCooldown!==voteCooldown)||(p.voteDuration!==undefined&&p.voteDuration!==voteDuration))socket.emit('update-settings',{voteCooldown:p.voteCooldown!==undefined?p.voteCooldown:voteCooldown,voteDuration:p.voteDuration!==undefined?p.voteDuration:voteDuration});}catch(e){}}
 function toggleTechSettings(){techOpen=!techOpen;const b=document.getElementById('tech-settings-btn');const p=document.getElementById('tech-settings-panel');if(b)b.classList.toggle('open',techOpen);if(p)p.style.display=techOpen?'flex':'none';if(!techOpen){voteOpen=false;const vb=document.getElementById('vote-settings-btn');const vp=document.getElementById('admin-controls');if(vb)vb.classList.remove('open');if(vp)vp.style.display='none';}}
 function toggleVoteSettings(){if(myRole!=='admin')return;voteOpen=!voteOpen;const b=document.getElementById('vote-settings-btn');const p=document.getElementById('admin-controls');if(b)b.classList.toggle('open',voteOpen);if(p)p.style.display=voteOpen?'block':'none';}
@@ -38,7 +37,9 @@ if(bootMode==='create'&&bootNick){
 myNickname=bootNick;
 myNickname=bootNick;localStorage.setItem('mp_nickname',bootNick);
 const bootOffline=urlParams.get('offline')==='1';
-socket.emit('create-room',{nickname:bootNick,offline:bootOffline},function(d){
+let _hostAutoShare=true;const _hostSelectedFiles=[];
+try{const _p=JSON.parse(localStorage.getItem('mp_personal_playlists')||'[]');if(Array.isArray(_p)){const _c=_p.find(x=>x&&x.classic);if(_c&&_c.autoShare===false)_hostAutoShare=false;_p.forEach(pl=>{if(pl&&!pl.classic&&pl.autoShare!==false)(pl.tracks||[]).forEach(t=>{if(t&&t.type==='local'&&t.filename)_hostSelectedFiles.push(t.filename);});});}}catch(e){}
+socket.emit('create-room',{nickname:bootNick,offline:bootOffline,hostAutoShare:_hostAutoShare,hostSelectedFiles:_hostSelectedFiles},function(d){
 if(d&&d.code){history.replaceState(null,'','/room?mode=join&code='+d.code+'&nick='+encodeURIComponent(bootNick));enterRoom(d);applyRoomPrefs();}
 else{showAlert('⚠️',translate('leave_room_title'),translate('boot_error'));setTimeout(backToStart,1500);}
 });
@@ -47,7 +48,7 @@ myNickname=bootNick;
 myNickname=bootNick;localStorage.setItem('mp_nickname',bootNick);
 socket.emit('join-room',{code:bootCode,nickname:bootNick},function(r){
 if(r.error){showAlert('⚠️',translate('leave_room_title'),r.error==='banned'?translate('banned_msg'):r.error);setTimeout(backToStart,1500);}
-else enterRoom(r);
+else{enterRoom(r);applyRoomPrefs();}
 });
 }else{backToStart();}
 }
@@ -55,7 +56,6 @@ socket.on('connect',()=>{mySocketId=socket.id;if(!booted&&bootMode){booted=true;
 function enterRoom(d){
 myRole=d.role;currentRoomCode=d.code;voteCooldown=d.voteCooldown||0;voteDuration=d.voteDuration||15;voiceChatEnabled=d.voiceEnabled||false;
 isLanOpen=!!d.lanOpen;updateLanButton();
-prefsLock=true;setTimeout(()=>{prefsLock=false;},2000);
 document.getElementById('room-code-el').innerText=d.code;
 document.getElementById('sidebar').style.display='flex';
 document.getElementById('player-bar').style.display='grid';
@@ -101,8 +101,8 @@ const vp=document.getElementById('admin-controls');if(vp)vp.style.display='none'
 setTimeout(backToStart,100);
 });
 }
-function toggleLan(){if(myRole!=='admin'){showToast(translate('lan_admin_only'),true);return;}socket.emit('toggle-lan');}
-socket.on('lan-update',o=>{isLanOpen=!!o;updateLanButton();saveRoomPrefs();});
+function toggleLan(){if(myRole!=='admin'){showToast(translate('lan_admin_only'),true);return;}socket.emit('toggle-lan');saveRoomPrefs();}
+socket.on('lan-update',o=>{isLanOpen=!!o;updateLanButton();});
 function updateLanButton(){const b=document.getElementById('lan-toggle-btn');if(!b)return;b.style.display='flex';b.classList.toggle('active',isLanOpen);b.textContent=isLanOpen?translate('lan_on'):translate('lan_off');}
 function copyRoomCode(){if(!currentRoomCode)return;navigator.clipboard.writeText(currentRoomCode).then(()=>showToast(translate('copied')));}
 function regenerateCode(){if(myRole!=='admin')return;showConfirm('🔑',translate('confirm_regen_title'),translate('confirm_regen_msg'),()=>{socket.emit('regenerate-room-code');});}
@@ -111,9 +111,9 @@ socket.on('kicked',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingW
 socket.on('banned',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('🚫','Бан',translate('banned_msg'));setTimeout(backToStart,2000);});
 socket.on('room-closed',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});showAlert('👋','Комната закрыта',translate('admin_left'));setTimeout(backToStart,2000);});
 socket.on('disconnect',()=>{if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});if(currentRoomCode){showAlert('👋','Связь потеряна','Хост вышел из комнаты или сервер недоступен.');setTimeout(backToStart,2500);}});
-socket.on('voice-status',e=>{voiceChatEnabled=e;if(myRole==='admin')updateVoiceToggleButton();if(!e&&isInVoice)leaveVoiceChat();updateVoiceEntryButton();saveRoomPrefs();});
+socket.on('voice-status',e=>{voiceChatEnabled=e;if(myRole==='admin')updateVoiceToggleButton();if(!e&&isInVoice)leaveVoiceChat();updateVoiceEntryButton();});
 socket.on('voice-chat-disabled',()=>{if(isInVoice)leaveVoiceChat();voiceChatEnabled=false;updateVoiceEntryButton();});
-function toggleVoiceChatSetting(){if(myRole!=='admin')return;socket.emit('toggle-voice-chat',!voiceChatEnabled);}
+function toggleVoiceChatSetting(){if(myRole!=='admin')return;socket.emit('toggle-voice-chat',!voiceChatEnabled);saveRoomPrefs();}
 function updateVoiceToggleButton(){const b=document.getElementById('voice-chat-toggle');if(!b)return;b.className=voiceChatEnabled?'voice-toggle-btn on':'voice-toggle-btn off';b.innerText=voiceChatEnabled?translate('voice_on'):translate('voice_off');}
 function updateVoiceEntryButton(){const b=document.getElementById('voice-entry-btn');if(!voiceChatEnabled){b.style.display='none';return;}b.style.display='flex';b.disabled=false;isLeaving=false;b.className=isInVoice?'voice-entry-btn leave':'voice-entry-btn join';b.innerHTML=isInVoice?translate('leave_voice'):translate('join_voice');}
 function updateManageBtnVisibility(){
@@ -543,27 +543,6 @@ va=String(va).toLowerCase();vb=String(vb).toLowerCase();
 if(va<vb)return -plSortDir;if(va>vb)return plSortDir;return 0;
 });
 }
-window.openShareSelectModal=function(requester){
-if(document.getElementById('share-select-modal'))return;
-let pls=[];try{pls=getPersonalPlaylists()||[];}catch(e){pls=[];}
-const ov=document.createElement('div');ov.id='share-select-modal';
-ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:4500;display:flex;align-items:center;justify-content:center;';
-const conf=(window._shareConfirmed&&window._shareConfirmed[currentRoomCode])||null;
-const rows=pls.map(p=>{const cnt=p.classic?'все треки':((p.tracks||[]).length+' треков');const on=conf?conf.indexOf(p.id)>=0:!!p.autoShare;const chk=on?' checked':'';
-return '<label class="ssm-row"><input type="checkbox" class="ssm-cb" data-id="'+escapeHtml(p.id)+'"'+chk+'><span class="ssm-nm">'+escapeHtml(p.classic?'📚 Все песни':p.name)+'</span><span class="ssm-ct">'+escapeHtml(cnt)+'</span></label>';}).join('');
-ov.innerHTML='<div class="ssm-box"><div class="ssm-h">📤 '+(requester||'Админ')+' просит передать твои треки</div>'
-+'<div class="ssm-sub">Отметь плейлисты, которые разрешаешь видеть в комнате. Снятие отметки не трогает уже переданное до этого запроса.</div>'
-+(rows?'<div class="ssm-list">'+rows+'</div>':'<div class="ssm-empty">Личных плейлистов пока нет — добавь их в ⚙ → Личные плейлисты.</div>')
-+'<div class="ssm-btns"><button class="ssm-no" id="ssm-no">Отказаться</button><button class="ssm-yes" id="ssm-yes">Передать выбранное</button></div></div>';
-const st=document.createElement('style');st.textContent='#share-select-modal .ssm-box{background:#1e1e1e;border:1px solid #3a3a3a;border-radius:14px;padding:22px;width:460px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.6);}#share-select-modal .ssm-h{font-size:17px;font-weight:bold;color:#fff;margin-bottom:6px;}#share-select-modal .ssm-sub{font-size:12px;color:#9a9a9a;line-height:1.5;margin-bottom:12px;}#share-select-modal .ssm-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}#share-select-modal .ssm-row{display:flex;align-items:center;gap:10px;background:#242424;border:1px solid #333;border-radius:8px;padding:10px 12px;cursor:pointer;}#share-select-modal .ssm-row:hover{background:#2a2a2a;}#share-select-modal .ssm-nm{flex:1;font-size:13px;color:#eee;}#share-select-modal .ssm-ct{font-size:11px;color:#888;}#share-select-modal .ssm-empty{color:#777;font-style:italic;text-align:center;padding:18px 0;font-size:13px;}#share-select-modal .ssm-btns{display:flex;gap:10px;justify-content:flex-end;}#share-select-modal .ssm-no{padding:10px 18px;border-radius:8px;border:none;background:#333;color:#b3b3b3;font-weight:bold;cursor:pointer;}#share-select-modal .ssm-no:hover{background:#3d3d3d;color:#fff;}#share-select-modal .ssm-yes{padding:10px 22px;border-radius:8px;border:none;background:#1db954;color:#000;font-weight:bold;cursor:pointer;}#share-select-modal .ssm-yes:hover{filter:brightness(1.1);}';
-document.head.appendChild(st);document.body.appendChild(ov);
-const close=()=>{ov.remove();st.remove();};
-document.getElementById('ssm-no').onclick=close; // «Отказаться» = ничего не слать, уже переданное не трогаем
-document.getElementById('ssm-yes').onclick=()=>{
-const ids=[...ov.querySelectorAll('.ssm-cb:checked')].map(c=>c.getAttribute('data-id'));
-close();
-if(!ids.length){showToast('Ничего не отмечено — передача отменена');return;}
-if(typeof window.publishPersonalShare==='function')window.publishPersonalShare(ids);
-};
-ov.addEventListener('click',e=>{if(e.target===ov)close();});
-};
+function updateCooldown(v){v=parseInt(v);if(isNaN(v)||v<0)v=0;voteCooldown=v;const el=document.getElementById('cooldown-input');if(el)el.value=v;if(myRole==='admin'&&socket&&socket.connected){socket.emit('update-settings',{voteCooldown:v});saveRoomPrefs();}}
+function updateVoteDuration(v){v=parseInt(v);if(isNaN(v)||v<5)v=5;voteDuration=v;const el=document.getElementById('vote-duration-input');if(el)el.value=v;if(myRole==='admin'&&socket&&socket.connected){socket.emit('update-settings',{voteDuration:v});saveRoomPrefs();}}
+function spinSetting(id,delta,min){const el=document.getElementById(id);if(!el)return;let v=parseInt(el.value);if(isNaN(v))v=(id==='cooldown-input'?0:15);v+=delta;const lo=(min!==undefined?min:(id==='cooldown-input'?0:5));if(v<lo)v=lo;el.value=v;if(id==='cooldown-input')updateCooldown(v);else updateVoteDuration(v);}
