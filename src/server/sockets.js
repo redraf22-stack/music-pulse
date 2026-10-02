@@ -55,8 +55,8 @@ if(rooms[code].playlists[0]){ const _cp=rooms[code].playlists[0]; if(hostAutoSha
             socket.emit('active-streams', as);
             if (room.activePoll) socket.emit('poll-start', room.activePoll.track);
             socket.emit('playlists-update', { list: room.playlists, active: room.activePlaylistId });
-            if (room.autoRequestShare && !reAdm) { const adm = io.sockets.sockets.get(room.adminId); io.to(socket.id).emit('share-requested', { requester: adm ? (adm.nickname || 'Админ') : 'Админ' }); }
             cb({ code: socket.roomCode, role: reAdm ? 'admin' : 'user', nickname: name, voteCooldown: room.voteCooldown, voteDuration: room.voteDuration, voiceEnabled: room.voiceEnabled, lanOpen: !!room.lanOpen, autoRequestShare: !!room.autoRequestShare });
+            if (room.autoRequestShare && !reAdm) { const adm = io.sockets.sockets.get(room.adminId); io.to(socket.id).emit('share-requested', { requester: adm ? (adm.nickname || 'Админ') : 'Админ' }); }
         });
         socket.on('toggle-lan', () => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.lanOpen = !room.lanOpen; io.to(socket.roomCode).emit('lan-update', room.lanOpen); });
         socket.on('leave-room', () => {
@@ -165,7 +165,7 @@ socket.on('request-screen-from', ({ requesterSocketId }) => {
         socket.on('remove-from-queue', id => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.queue = room.queue.filter(t => t.id !== id); R.broadcastQueue(socket.roomCode); });
         socket.on('reorder-queue', ({ id, direction }) => { if ((!socket.isAdmin && !socket.isMod && !socket.isVip) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const i = room.queue.findIndex(t => t.id === id); if (i === -1) return; if (direction === 'up' && i > 0) [room.queue[i], room.queue[i - 1]] = [room.queue[i - 1], room.queue[i]]; else if (direction === 'down' && i < room.queue.length - 1) [room.queue[i], room.queue[i + 1]] = [room.queue[i + 1], room.queue[i]]; R.broadcastQueue(socket.roomCode); });
         socket.on('resolve-inbox', ({ id, action }) => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const i = room.inbox.findIndex(s => s.id === id); if (i === -1) return; const it = room.inbox.splice(i, 1)[0]; if (action === 'now') R.playTrackInRoom(socket.roomCode, room, it); else if (action === 'next') room.queue.unshift(utils.normalizeTrack(it)); else if (action === 'end') room.queue.push(utils.normalizeTrack(it)); R.broadcastInbox(socket.roomCode); R.broadcastQueue(socket.roomCode); });
-        socket.on('play-prev', () => {
+        socket.on('play-prev', (payload) => {
             if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return;
             const room = rooms[socket.roomCode]; if (!room || !room.playHistory || !room.playHistory.length) return;
     // ✅ текущий трек становится ПЕРВЫМ в очереди ожидания
@@ -177,17 +177,18 @@ socket.on('request-screen-from', ({ requesterSocketId }) => {
                 R.broadcastQueue(socket.roomCode);
             }
             const prev = room.playHistory.pop();
-            if (prev) R.playTrackInRoom(socket.roomCode, room, prev);
+            if (prev) R.playTrackInRoom(socket.roomCode, room, prev, !(payload && payload.keepPaused));
         });
-        socket.on('play-next', async () => {
+        socket.on('play-next', async (payload) => {
             if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return;
+            const keepPaused = !!(payload && payload.keepPaused);
             if (room.state.trackUrl) { room.playHistory.push(utils.normalizeTrack({ title: room.state.trackName, artist: room.state.trackArtist, cover: room.state.trackCover, preview: room.state.originalPreview || room.state.trackUrl, isLocal: room.state.isLocal })); if (room.playHistory.length > 50) room.playHistory.shift(); }
             let next = null;
             if (room.queue.length) { next = room.queue.shift(); if (room.randomMode && !R.hasRandomInQueue(room)) R.addRandomToQueueEnd(room); }
             else if (room.randomMode) { next = await R.getRandomTrackForRoom(socket.roomCode); if (next) R.addRandomToQueueEnd(room); }
-            if (next) { R.playTrackInRoom(socket.roomCode, room, next); R.broadcastQueue(socket.roomCode); }
+            if (next) { R.playTrackInRoom(socket.roomCode, room, next, !keepPaused); R.broadcastQueue(socket.roomCode); }
 else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roomCode).emit('sync', { ...room.state, playHistory: room.playHistory || [] }); }
-        });
+});
         socket.on('toggle-random-mode', async () => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.randomMode = !room.randomMode; io.to(socket.roomCode).emit('random-mode-update', room.randomMode); if (room.randomMode) { room.queue = room.queue.filter(t => !(t.suggestedBy || '').includes('Рандом')); R.broadcastQueue(socket.roomCode); if (!room.state.playing || !room.state.trackUrl) { const tr = await R.getRandomTrackForRoom(socket.roomCode); if (tr) R.playTrackInRoom(socket.roomCode, room, tr); } if (!R.hasRandomInQueue(room)) R.addRandomToQueueEnd(room); } });
         socket.on('seek', time => { if ((!socket.isAdmin && !socket.isMod) || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.state.currentTime = time; if (room.state.playing) room.state.startedAt = Date.now() - time * 1000; io.to(socket.roomCode).emit('sync', { ...room.state, playHistory: room.playHistory || [], isSeek: true }); });
         socket.on('update-state', ns => {
@@ -360,7 +361,7 @@ else { room.state.playing = false; room.state.startedAt = null; io.to(socket.roo
     Object.keys(rooms).forEach(code => {
         const r = rooms[code];
         if (r && r.state && r.state.playing && r.state.trackUrl) {
-            io.to(code).emit('sync', { ...r.state });
+            io.to(code).emit('sync', { ...r.state, heartbeat: true });
         }
     });
 }, 5000);

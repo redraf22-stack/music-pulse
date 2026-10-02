@@ -4,12 +4,13 @@ module.exports = function (io, utils) {
     function broadcastUsers(code) { if (rooms[code]) io.to(code).emit('users-update', rooms[code].users.map(u => { const s = io.sockets.sockets.get(u.id); const vs = rooms[code].voiceStates[u.id] || null; return { ...u, voiceState: vs, videoEnabled: !!(vs && vs.videoEnabled), screenEnabled: !!(vs && vs.screenEnabled), peerId: s?.peerId || null }; })); }
     function broadcastQueue(code) { if (rooms[code]) io.to(code).emit('queue-update', rooms[code].queue); }
     function broadcastInbox(code) { if (rooms[code]) { const r = rooms[code]; io.to(r.adminId).emit('inbox-update', r.inbox); r.users.forEach(u => { if (u.isMod) io.to(u.id).emit('inbox-update', r.inbox); }); } }
-    function playTrackInRoom(code, room, track) {
+    function playTrackInRoom(code, room, track, playing) {
         const nt = utils.normalizeTrack(track); if (!nt) return;
         const orig = nt.preview; let url = orig;
         if (!nt.isLocal && orig && orig.includes('dzcdn.net')) url = `/proxy?url=${encodeURIComponent(orig)}`;
         const prev = (room.playHistory && room.playHistory.length) ? room.playHistory[room.playHistory.length - 1] : null;
-        room.state = { ...room.state, trackName: nt.title, trackArtist: nt.artist.name, trackCover: nt.cover, trackUrl: url, originalPreview: orig, isLocal: nt.isLocal, playing: true, currentTime: 0, startedAt: Date.now(), prevTrack: prev };
+        const play = playing !== false;
+        room.state = { ...room.state, trackName: nt.title, trackArtist: nt.artist.name, trackCover: nt.cover, trackUrl: url, originalPreview: orig, isLocal: nt.isLocal, playing: play, currentTime: 0, startedAt: play ? Date.now() : null, prevTrack: prev };
         io.to(code).emit('sync', { ...room.state, playHistory: room.playHistory || [] });
     }
     function hasRandomInQueue(r) { return r.queue.some(t => (t.suggestedBy || '').includes('Рандом')); }

@@ -18,6 +18,7 @@ autoRequestTracks=!autoRequestTracks;
 const b=document.getElementById('auto-request-btn');
 if(b)b.classList.toggle('active',autoRequestTracks);
 localStorage.setItem('mp_auto_request',autoRequestTracks?'1':'0');
+if(myRole==='admin'&&socket&&socket.connected)socket.emit('update-settings',{autoRequestShare:autoRequestTracks});
 if(autoRequestTracks&&currentRoomCode){
 // Сразу отправляем запросы всем
 (lastUsersList||[]).forEach(u=>{
@@ -78,6 +79,7 @@ if(window.electronAPI&&typeof publishPersonalShare==='function'){const _c=window
 autoRequestTracks=localStorage.getItem('mp_auto_request')==='1';
 const arb=document.getElementById('auto-request-btn');
 if(arb)arb.classList.toggle('active',autoRequestTracks);
+if(myRole==='admin'&&autoRequestTracks&&socket&&socket.connected)socket.emit('update-settings',{autoRequestShare:true});
 // Автоматический запрос треков при входе
 if(autoRequestTracks){
 setTimeout(()=>{
