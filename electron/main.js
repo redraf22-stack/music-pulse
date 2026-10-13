@@ -1,5 +1,5 @@
 const { autoUpdater } = require('electron-updater');
-const { app, BrowserWindow, ipcMain, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const dgram = require('dgram');
 const fs = require('fs');
@@ -476,28 +476,30 @@ ipcMain.handle('hk-global-set', (event, mapping) => {
 ipcMain.on('hk-global-pause', (event, p) => { hkPaused = !!p; hkEdges = {}; });
 
 // ===== Системные медиа-клавиши (Play/Pause, Next, Prev) =====
-// Перехватываются глобально (RegisterHotKey), ТОЛЬКО пока пользователь в комнате:
-// у кнопок управления комнатой приоритет над остальными медиа-плеерами.
-const MEDIA_KEY_ACCS = { 'MediaPlayPause': 'playpause', 'MediaNextTrack': 'next', 'MediaPrevTrack': 'prev' };
-let mediaKeysRegistered = false;
-function mediaKeysUnregister() {
-    if (!mediaKeysRegistered) return;
-    try { Object.keys(MEDIA_KEY_ACCS).forEach(acc => globalShortcut.unregister(acc)); } catch (e) {}
-    mediaKeysRegistered = false;
+// Реализованы ОПРОСОМ того же GetAsyncKeyState (koffi), что и горячие клавиши:
+// globalShortcut (RegisterHotKey) на медиаклавиши часто НЕ срабатывает на Windows —
+// состояние кнопок перехватывают драйверы клавиатур/гарнитур (Realtek, vendor-утилиты).
+// Опрос читает состояние напрямую и работает у всех. Активны только пока пользователь в комнате.
+const MEDIA_VKS = [[0xB3, 'playpause'], [0xB0, 'next'], [0xB1, 'prev']]; // VK_MEDIA_PLAY_PAUSE / NEXT_TRACK / PREV_TRACK
+let mkTimer = null, mkEdges = {};
+function mkTick() {
+    if (!hkGetKey) return;
+    MEDIA_VKS.forEach(([vk, a]) => {
+        const hit = !!(hkGetKey(vk) & 0x8000);
+        if (hit && !mkEdges[a] && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('media-key', a);
+        mkEdges[a] = hit;
+    });
 }
 ipcMain.handle('media-keys-set', (event, on) => {
     try {
-        if (on && !mediaKeysRegistered) {
-            let n = 0;
-            Object.keys(MEDIA_KEY_ACCS).forEach(acc => {
-                if (globalShortcut.register(acc, () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('media-key', MEDIA_KEY_ACCS[acc]); })) n++;
-            });
-            mediaKeysRegistered = n > 0;
-            console.log('[media-keys] зарегистрировано ' + n + '/3');
-            return { ok: n > 0, n };
+        if (on && !mkTimer) {
+            if (!hkEnsureKoffi()) return { ok: false, error: 'koffi недоступен' };
+            mkEdges = {};
+            mkTimer = setInterval(mkTick, 30);
+            console.log('[media-keys] опрос медиаклавиш включён');
+            return { ok: true, via: 'poll' };
         }
-        if (!on) mediaKeysUnregister();
+        if (!on && mkTimer) { clearInterval(mkTimer); mkTimer = null; mkEdges = {}; console.log('[media-keys] опрос медиаклавиш выключен'); }
         return { ok: true };
     } catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
 });
-app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
