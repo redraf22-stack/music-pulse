@@ -1,5 +1,5 @@
 const { autoUpdater } = require('electron-updater');
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut } = require('electron');
 const path = require('path');
 const dgram = require('dgram');
 const fs = require('fs');
@@ -474,3 +474,30 @@ ipcMain.handle('hk-global-set', (event, mapping) => {
     return { ok: true };
 });
 ipcMain.on('hk-global-pause', (event, p) => { hkPaused = !!p; hkEdges = {}; });
+
+// ===== Системные медиа-клавиши (Play/Pause, Next, Prev) =====
+// Перехватываются глобально (RegisterHotKey), ТОЛЬКО пока пользователь в комнате:
+// у кнопок управления комнатой приоритет над остальными медиа-плеерами.
+const MEDIA_KEY_ACCS = { 'MediaPlayPause': 'playpause', 'MediaNextTrack': 'next', 'MediaPrevTrack': 'prev' };
+let mediaKeysRegistered = false;
+function mediaKeysUnregister() {
+    if (!mediaKeysRegistered) return;
+    try { Object.keys(MEDIA_KEY_ACCS).forEach(acc => globalShortcut.unregister(acc)); } catch (e) {}
+    mediaKeysRegistered = false;
+}
+ipcMain.handle('media-keys-set', (event, on) => {
+    try {
+        if (on && !mediaKeysRegistered) {
+            let n = 0;
+            Object.keys(MEDIA_KEY_ACCS).forEach(acc => {
+                if (globalShortcut.register(acc, () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('media-key', MEDIA_KEY_ACCS[acc]); })) n++;
+            });
+            mediaKeysRegistered = n > 0;
+            console.log('[media-keys] зарегистрировано ' + n + '/3');
+            return { ok: n > 0, n };
+        }
+        if (!on) mediaKeysUnregister();
+        return { ok: true };
+    } catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
+});
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) {} });

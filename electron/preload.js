@@ -48,6 +48,8 @@ onChatWindowClosed: (cb) => ipcRenderer.on('chat-window-closed', () => cb()),
     getLanIp: () => ipcRenderer.invoke('get-lan-ip'),
     hkGlobalSet: (m) => ipcRenderer.invoke('hk-global-set', m),
     hkGlobalPause: (p) => ipcRenderer.send('hk-global-pause', !!p),
-    onHkGlobal: (cb) => ipcRenderer.on('hk-global', (e, d) => cb(d))
+    onHkGlobal: (cb) => ipcRenderer.on('hk-global', (e, d) => cb(d)),
+    mediaKeysSet: (on) => ipcRenderer.invoke('media-keys-set', !!on),
+    onMediaKey: (cb) => ipcRenderer.on('media-key', (e, a) => cb(a))
     
 });

@@ -3,7 +3,10 @@ const urlParams=new URLSearchParams(window.location.search);
 const voiceUsers=new Set();
 socket.on('user-joined-voice',d=>{if(d&&d.id){voiceUsers.add(d.id);if(lastUsersList)renderUsersList(lastUsersList);}});
 socket.on('user-left-voice',d=>{if(d&&d.id){voiceUsers.delete(d.id);if(lastUsersList)renderUsersList(lastUsersList);}});
-function backToStart(){try{if(window.electronAPI&&window.electronAPI.closeChatWindow)window.electronAPI.closeChatWindow();}catch(e){}if(window.electronAPI&&window.electronAPI.goStart){window.electronAPI.goStart(currentLang);}else{window.location.replace('/');}}
+function backToStart(){try{if(window.electronAPI&&window.electronAPI.mediaKeysSet)window.electronAPI.mediaKeysSet(false);}catch(e){}try{if(window.electronAPI&&window.electronAPI.closeChatWindow)window.electronAPI.closeChatWindow();}catch(e){}if(window.electronAPI&&window.electronAPI.goStart){window.electronAPI.goStart(currentLang);}else{window.location.replace('/');}}
+// Системные медиа-клавиши (Play/Pause, Next, Prev) — приходят из главного процесса.
+// Внутри togglePlay/playNextTrack/playPrevTrack уже стоит проверка admin/mod.
+if(window.electronAPI&&window.electronAPI.onMediaKey)window.electronAPI.onMediaKey(a=>{if(a==='playpause')togglePlay();else if(a==='next')playNextTrack();else if(a==='prev')playPrevTrack();});
 const bootMode=urlParams.get('mode');
 const bootNick=(urlParams.get('nick')||'').trim();
 const bootCode=(urlParams.get('code')||'').trim().toUpperCase();
@@ -56,6 +59,7 @@ else{enterRoom(r);applyRoomPrefs();}
 socket.on('connect',()=>{mySocketId=socket.id;if(!booted&&bootMode){booted=true;bootstrap();}});
 function enterRoom(d){
 myRole=d.role;currentRoomCode=d.code;voteCooldown=d.voteCooldown||0;voteDuration=d.voteDuration||15;voiceChatEnabled=d.voiceEnabled||false;
+if(window.electronAPI&&window.electronAPI.mediaKeysSet)window.electronAPI.mediaKeysSet(true);
 isLanOpen=!!d.lanOpen;updateLanButton();
 document.getElementById('room-code-el').innerText=d.code;
 document.getElementById('sidebar').style.display='flex';
