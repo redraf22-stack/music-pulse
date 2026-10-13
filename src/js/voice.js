@@ -42,6 +42,18 @@ function cleanupAudioResources() {
 
 window.addEventListener('beforeunload', cleanupAudioResources);
 window.addEventListener('unload', cleanupAudioResources);
+// ===== Диагностика войса: консоль + файл на сервере (voice-diag.log), чтобы ловить поломки без релизов =====
+let _vdiagBuf=[];let _vdiagTimer=null;
+function VDBG(ev,detail,extra){
+try{
+const who=(myNickname||'?')+'/'+String(mySocketId||'-').slice(-5);
+const line=new Date().toISOString().slice(11,23)+' '+who+' '+ev+(detail!==undefined?' '+JSON.stringify(detail):'')+(extra!==undefined?' '+JSON.stringify(extra):'');
+console.log('[voice-diag] '+line);
+_vdiagBuf.push(line);
+if(_vdiagBuf.length>40)_vdiagBuf.shift();
+if(!_vdiagTimer){_vdiagTimer=setTimeout(()=>{_vdiagTimer=null;const b=_vdiagBuf.slice();_vdiagBuf=[];fetch('/api/voice-diag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines:b}),keepalive:true}).catch(()=>{});},3000);}
+}catch(e){}
+}
 function volStore(){try{return JSON.parse(localStorage.getItem('mp_volumes')||'{}');}catch(e){return{};}}
 function volStoreSet(key, v) {
     try {
@@ -91,7 +103,7 @@ function ensurePeer(){
 if(peer&&myPeerId)return Promise.resolve(myPeerId);
 return new Promise((resolve,reject)=>{
 try{
-if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);});}
+if(!peer){peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});peer.on('call',handleIncomingCall);peer.on('error',e=>{VDBG('peer-error(ensure)',{type:e.type,message:e.message});showToast(translate('error_prefix')+e.type,true);});}
 peer.once('open',pid=>{myPeerId=pid;socket.emit('register-peer-id',pid);resolve(pid);});
 }catch(e){reject(e);}
 });
@@ -100,7 +112,7 @@ async function toggleVoiceConnection(){if(isLeaving)return;if(isInVoice)await le
 async function leaveVoiceChat(){
 if(isLeaving)return;
 isLeaving=true;
-isInVoice=false;forceMuted=false;forceDeafened=false;isMuted=false;isDeafened=false;
+isInVoice=false;forceMuted=false;forceDeafened=false;isMuted=false;isDeafened=false;if(typeof pttHeld!=='undefined')pttHeld=false;
 updateVoiceEntryButton();updateVoiceControlsInPlayer();stopSelfSpeakingDetection();
 console.log('[voice] leaveVoiceChat called, isLeaving:', isLeaving);
 try{socket.emit('leave-voice');}catch(e){}
@@ -121,6 +133,7 @@ let micId=selectedMicId;try{if(typeof resolveDeviceId==='function')micId=await r
 const co={audio:Object.assign({echoCancellation:false,noiseSuppression:false,autoGainControl:false},micId?{deviceId:{exact:micId}}:{}),video:false};
 myStream=await navigator.mediaDevices.getUserMedia(co);
 console.log('[voice] myStream created, tracks:', myStream.getTracks().map(t=>({kind:t.kind,enabled:t.enabled,readyState:t.readyState})));
+applyMicGate(); // PTT/мьют: трек стартует уже в правильном состоянии
 startSelfSpeakingDetection(myStream);
 // Мониторинг трека микрофона
 const audioTrack=myStream.getAudioTracks()[0];
@@ -134,14 +147,17 @@ showToast('⚠️ Микрофон отключён системой. Перез
 if(!peer){
 peer=new Peer({host:window.location.hostname,port:3002,path:'/peerjs',secure:window.location.protocol==='https:',debug:1});
 peer.on('call',handleIncomingCall);
-peer.on('error',e=>{showToast(translate('error_prefix')+e.type,true);leaveVoiceChat();});
+peer.on('error',e=>{VDBG('peer-error',{type:e.type,message:e.message});showToast(translate('error_prefix')+e.type,true);leaveVoiceChat();});
 }
-if(!myPeerId){await new Promise(res=>{if(myPeerId)return res(myPeerId);peer.once('open',pid=>{myPeerId=pid;res(pid);});});}
+if(!myPeerId){await new Promise(res=>{if(myPeerId)return res(myPeerId);peer.once('open',pid=>{myPeerId=pid;VDBG('peer-open',{pid:pid});res(pid);});});}
 isInVoice=true;forceMuted=false;forceDeafened=false;isLeaving=false;
 socket.emit('register-peer-id',myPeerId);
 updateVoiceEntryButton();updateVoiceControlsInPlayer();
 socket.emit('join-voice');
+VDBG('join-voice-emitted',{peerId:myPeerId});
 showToast(translate('connected'));
+// Подсказка при входе в войс с включённым PTT — иначе можно минуту говорить в молчание
+if(typeof hkPttOn==='function'&&hkPttOn()&&!(typeof pttHeld!=='undefined'&&pttHeld))setTimeout(()=>{try{showToast(translate('ptt_active_toast',{key:comboLabel(hkCombo('ptt'))}));}catch(e){}},2300);
 }catch(e){let m=e.message;if(e.name==='NotAllowedError')m=translate('mic_denied');else if(e.name==='NotFoundError')m=translate('mic_not_found');else if(e.name==='SecurityError')m=translate('need_https');showToast(m,true);eb.disabled=false;updateVoiceEntryButton();}
 }
 function handleIncomingCall(call){
@@ -152,19 +168,26 @@ const isVideo=call.metadata&&call.metadata.type==='video';
 const isScreen=call.metadata&&call.metadata.type==='screen';
 if(isVideo){if(myVideoStream)call.answer(myVideoStream);else call.answer();handleVideoCall(call);}
 else if(isScreen){if(myScreenStream)call.answer(myScreenStream);else call.answer();handleScreenCall(call);}
-else{call.answer(myStream);handleAudioCall(call);}
+else{VDBG('incoming-voice-call',call.peer,{hasMyStream:!!myStream,tracks:myStream?myStream.getTracks().length:0});call.answer(myStream);handleAudioCall(call);}
 }
 function handleAudioCall(c){
 console.log('[voice] handleAudioCall from', c.peer);
 currentCalls[c.peer]=c;
 c.on('stream',rs=>{
 const pid=c.peer;
+VDBG('stream-received',pid,{tracks:rs.getTracks().map(t=>t.kind+':'+t.readyState+(t.enabled?'':':off'))});
 let sv=localVolumes[pid]!==undefined?localVolumes[pid]:undefined;
 if(sv===undefined){const sid=peerToSocket[pid];const u=(lastUsersList||[]).find(x=>x.id===sid);const saved=u?getUserVol(u):undefined;if(saved!==undefined){sv=saved;localVolumes[pid]=sv;}}
 if(sv===undefined)sv=0.5;
 const ctx=getGlobalAudioContext();
 if(ctx&&ctx.state==='suspended'){try{ctx.resume();}catch(e){}}
-// Единственный путь звука — граф (gain до 200%). HTMLMediaElement НЕ создаём: его потребление того же потока конфликтовало с графом по clock'ам и давало джиттер/задержку приёма.
+// Звук идёт через граф (gain до 200%), НО поток обязан также потреблять глухой <audio> (volume=0):
+// в Chromium/Electron удалённый WebRTC-трек может не отдаваться в AudioContext, пока его не "прокачает" media-элемент.
+// Именно такой элемент держала рабочая 2.0.0; в 2.0.6 его убрали — и войс стал глухим. Двойного звука нет: элемент глухой.
+try{
+const ae=new Audio();ae.srcObject=rs;ae.volume=0;ae.muted=false;ae.autoplay=true;c._audioElement=ae;
+ae.play().then(()=>VDBG('element-pumping',pid)).catch(e=>VDBG('element-play-fail',pid,String(e&&e.message||e)));
+}catch(e){VDBG('element-error',pid,String(e&&e.message||e));}
 try{
 const g=ctx.createGain();
 const base=volumeToGain(sv);
@@ -172,7 +195,8 @@ g.gain.value=(forceDeafened||isDeafened)?0:base;
 const src=ctx.createMediaStreamSource(rs);
 src.connect(g);g.connect(ctx.destination);
 c._gainNode=g;c._sourceNode=src;c._baseGain=base;
-}catch(e){console.error('[voice] audio graph error',e);}
+VDBG('graph-built',pid,{ctx:ctx?ctx.state:'none',gain:Math.round(g.gain.value*100)/100,sink:(ctx&&ctx.outputSinkId)||'default'});
+}catch(e){console.error('[voice] audio graph error',e);VDBG('graph-error',pid,String(e&&e.message||e));}
 startSpeakingDetection(pid,rs);
 });
 c.on('close',()=>{console.log('[voice] call closed', c.peer, 'reason:', c.closeReason || 'unknown');const x=currentCalls[c.peer];if(x){try{if(x._audioElement){x._audioElement.pause();x._audioElement.srcObject=null;x._audioElement.remove();}if(x._gainNode)x._gainNode.disconnect();if(x._sourceNode)x._sourceNode.disconnect();}catch(e){}}stopSpeakingDetection(c.peer);delete currentCalls[c.peer];});
@@ -193,9 +217,10 @@ call.on('stream',stream=>{screenStreams[peerId]=stream;const uniqueKey=Object.ke
 call.on('close',()=>{delete screenCalls[peerId];delete screenStreams[peerId];const uniqueKey=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===peerId);if(uniqueKey){delete screenUserInfo[uniqueKey];delete allUsersWithScreen[uniqueKey];if(screenWindows[uniqueKey])closeScreenWindow(uniqueKey);}updateMediaUsersList();});
 }
 socket.on('user-joined-voice',({id,peerId})=>{
+VDBG('evt-user-joined-voice',{id:String(id).slice(-5),peerId:peerId,willCall:!!(isInVoice&&peer&&peerId&&peerId!==myPeerId)});
 if(!isInVoice||!peer||!peerId||peerId===myPeerId)return;
 socketToPeer[id]=peerId;peerToSocket[peerId]=id;
-if(!currentCalls[peerId]){const call=peer.call(peerId,myStream);handleAudioCall(call);}
+if(!currentCalls[peerId]){const call=peer.call(peerId,myStream);handleAudioCall(call);VDBG('outgoing-call-placed',peerId);}
 setTimeout(()=>updateMediaUsersList(),500);
 });
 socket.on('user-left-voice',({id,peerId})=>{const tp=peerId||socketToPeer[id];if(id)delete socketToPeer[id];if(tp)delete peerToSocket[tp];if(currentCalls[tp]){try{if(currentCalls[tp]._audioElement){currentCalls[tp]._audioElement.pause();currentCalls[tp]._audioElement.remove();}if(currentCalls[tp]._gainNode)currentCalls[tp]._gainNode.disconnect();if(currentCalls[tp]._sourceNode)currentCalls[tp]._sourceNode.disconnect();if(currentCalls[tp]._shaperNode)currentCalls[tp]._shaperNode.disconnect();currentCalls[tp].close();}catch(e){}stopSpeakingDetection(tp);delete currentCalls[tp];}if(videoCalls[tp]){try{videoCalls[tp].close();}catch(e){}delete videoCalls[tp];delete videoStreams[tp];const uk=Object.keys(videoUserInfo).find(k=>videoUserInfo[k].peerId===tp);if(uk){delete videoUserInfo[uk];delete allUsersWithVideo[uk];if(videoWindows[uk])closeVideoWindow(uk);}}if(screenCalls[tp]){try{screenCalls[tp].close();}catch(e){}delete screenCalls[tp];delete screenStreams[tp];const uk=Object.keys(screenUserInfo).find(k=>screenUserInfo[k].peerId===tp);if(uk){delete screenUserInfo[uk];delete allUsersWithScreen[uk];if(screenWindows[uk])closeScreenWindow(uk);}}if(tp&&window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({peerId:tp});
@@ -393,10 +418,13 @@ resizer.addEventListener('mousedown',e=>{if(win.classList.contains('fullscreen')
 document.addEventListener('mousemove',e=>{if(!isResizing)return;const dx=e.clientX-startX;const dy=e.clientY-startY;const newW=Math.max(240,Math.min(window.innerWidth-startLeft-20,startW+dx));const newH=Math.max(180,Math.min(window.innerHeight-startTop-20,startH+dy));win.style.width=newW+'px';win.style.height=newH+'px';});
 document.addEventListener('mouseup',()=>{isResizing=false;});
 }
-function toggleMic(){if(!myStream||forceMuted){if(forceMuted)showToast(translate('force_muted'),true);return;}isMuted=!isMuted;myStream.getAudioTracks()[0].enabled=!isMuted;updateVoiceControlsInPlayer();syncSelfVoiceState();}
+// Единая точка состояния микрофона: обычный мьют + мьют от админа + режим PTT.
+// PTT-состояние (pttHeld) и конфиг (hkLoad().ptt) живут в hotkeys.js; если hotkeys.js не подключён — работаем без PTT.
+function applyMicGate(){if(!myStream)return;const t=myStream.getAudioTracks()[0];if(!t)return;let on=!isMuted&&!forceMuted;if(typeof hkLoad==='function'&&hkLoad().ptt.enabled)on=on&&(typeof pttHeld!=='undefined'&&!!pttHeld);t.enabled=on;}
+function toggleMic(){if(!myStream||forceMuted){if(forceMuted)showToast(translate('force_muted'),true);return;}isMuted=!isMuted;applyMicGate();updateVoiceControlsInPlayer();syncSelfVoiceState();}
 function toggleDeafen(){if(forceDeafened){showToast(translate('force_deafened'),true);return;}isDeafened=!isDeafened;applyDeafenState();updateVoiceControlsInPlayer();syncSelfVoiceState();}
 function applyDeafenState(){const d=forceDeafened||isDeafened;Object.values(currentCalls).forEach(c=>{if(c._gainNode){const ctx=getGlobalAudioContext();if(ctx)c._gainNode.gain.setTargetAtTime(d?0:(c._baseGain||volumeToGain(0.5)),ctx.currentTime,0.01);}else if(c._audioElement){c._audioElement.muted=d;}});}
-socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){myStream.getAudioTracks()[0].enabled=!forceMuted&&!isMuted;}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;applyDeafenState();showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
+socket.on('force-voice-update',({action,value})=>{if(action==='mute'){forceMuted=!!value;if(myStream&&myStream.getAudioTracks().length>0){applyMicGate();}showToast(forceMuted?translate('force_muted'):translate('unmuted'),forceMuted);}else if(action==='deafen'){forceDeafened=!!value;applyDeafenState();showToast(forceDeafened?translate('force_deafened'):translate('undeafened'),forceDeafened);}updateVoiceControlsInPlayer();updateForceStatusBanner();});
 function setLocalUserVolume(sid,v){const val=parseFloat(v);const pid=socketToPeer[sid];let tp=pid;if(!tp){for(const p of Object.keys(currentCalls)){if(peerToSocket[p]===sid){tp=p;socketToPeer[sid]=p;break;}}}if(!tp)return;localVolumes[tp]=val;const u=(lastUsersList||[]).find(x=>x.id===sid);if(u)volStoreSet(getUserVolKey(u),val);const c=currentCalls[tp];if(!c)return;const gv=volumeToGain(val);c._baseGain=gv;if(c._gainNode&&!(forceDeafened||isDeafened)){const ctx=getGlobalAudioContext();if(ctx)c._gainNode.gain.setTargetAtTime(gv,ctx.currentTime,0.015);}}
 function onUserVolumeInput(sid,el,rng){let v=parseInt(el.value);if(isNaN(v)||v<0)v=0;if(v>200)v=200;el.value=v;const sv=v/200;if(rng)rng.value=sv;setLocalUserVolume(sid,sv);}
 function spinUserVolume(sid,delta,rng,inp){let v=parseInt(inp.value);if(isNaN(v))v=100;v+=delta;if(v<0)v=0;if(v>200)v=200;inp.value=v;onUserVolumeInput(sid,inp,rng);}
@@ -461,6 +489,24 @@ setInterval(() => {
         });
     }
 }, 30000);
+
+// Диагностика: снимок WebRTC по каждому звонку раз в 10с, пока ты в войсе.
+// bytesReceived > 0 означает, что звук ДОХОДИТ по сети и проблема в воспроизведении (и наоборот).
+setInterval(() => {
+    if (!isInVoice) return;
+    Object.keys(currentCalls).forEach(pid => {
+        const c = currentCalls[pid]; if (!c || !c.peerConnection) return;
+        try {
+            c.peerConnection.getStats().then(s => {
+                let bytes = null, packets = null;
+                s.forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'audio') { bytes = r.bytesReceived; packets = r.packetsReceived; } });
+                const rx = c.peerConnection.getReceivers && c.peerConnection.getReceivers()[0];
+                const tr = rx ? rx.track : null;
+                VDBG('rtc-health', pid, { conn: c.peerConnection.connectionState, ice: c.peerConnection.iceConnectionState, bytes: bytes, packets: packets, trackMuted: tr ? tr.muted : 'no-track', trackReady: tr ? tr.readyState : 'no-track' });
+            }).catch(() => {});
+        } catch (e) {}
+    });
+}, 10000);
 document.addEventListener('keydown',e=>{
 if(e.key==='Escape'){
 Object.keys(videoWindows).forEach(k=>{const w=videoWindows[k];if(w&&w.classList.contains('fullscreen'))toggleVideoFullscreen(k);});

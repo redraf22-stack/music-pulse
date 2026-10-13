@@ -35,3 +35,26 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){const viewe
 (function(){const header=document.getElementById('chat-header');const win=document.getElementById('chat-window');let isDragging=false,offsetX=0,offsetY=0;header.addEventListener('mousedown',function(e){if(chatFullscreen)return;if(e.target.closest('.chat-btn'))return;isDragging=true;const rect=win.getBoundingClientRect();offsetX=e.clientX-rect.left;offsetY=e.clientY-rect.top;win.style.right='auto';win.style.bottom='auto';win.style.left=rect.left+'px';win.style.top=rect.top+'px';e.preventDefault();});document.addEventListener('mousemove',function(e){if(!isDragging)return;let x=e.clientX-offsetX;let y=e.clientY-offsetY;x=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,x));y=Math.max(0,Math.min(window.innerHeight-win.offsetHeight,y));win.style.left=x+'px';win.style.top=y+'px';});document.addEventListener('mouseup',function(){isDragging=false;});})();
 (function(){const resizer=document.getElementById('chat-resize');const win=document.getElementById('chat-window');let isResizing=false,startX,startY,startW,startH,startLeft,startTop;resizer.addEventListener('mousedown',function(e){if(chatFullscreen)return;isResizing=true;startX=e.clientX;startY=e.clientY;startW=win.offsetWidth;startH=win.offsetHeight;const rect=win.getBoundingClientRect();startLeft=rect.left;startTop=rect.top;win.style.left=startLeft+'px';win.style.top=startTop+'px';win.style.right='auto';win.style.bottom='auto';e.preventDefault();});document.addEventListener('mousemove',function(e){if(!isResizing)return;const dx=e.clientX-startX;const dy=e.clientY-startY;const newW=Math.max(280,Math.min(window.innerWidth-startLeft-20,startW+dx));const newH=Math.max(300,Math.min(window.innerHeight-startTop-20,startH+dy));win.style.width=newW+'px';win.style.height=newH+'px';chatWindowState.w=newW;chatWindowState.h=newH;});document.addEventListener('mouseup',function(){isResizing=false;});})();
 window.addEventListener('focus',function(){if(chatOpen){chatUnreadCount=0;updateChatBadge();}});
+
+// ===== Перетаскивание файла в чат =====
+// Файл из проводника → предпросмотр прикрепления (то же, что и через 📎), чат открывается если был закрыт.
+(function(){
+function _ddHasFiles(e){return !!(e.dataTransfer&&e.dataTransfer.types&&Array.prototype.indexOf.call(e.dataTransfer.types,'Files')>=0);}
+function _ddType(file){const t=file.type||'';if(t.indexOf('image/')===0)return'image';if(t.indexOf('video/')===0)return'video';if(t.indexOf('audio/')===0)return'audio';return'file';}
+function _ddHighlight(on){const w=document.getElementById('chat-window');if(w)w.classList.toggle('drop-active',!!on);}
+let ddCount=0;
+document.addEventListener('dragover',function(e){if(!_ddHasFiles(e))return;e.preventDefault();e.dataTransfer.dropEffect='copy';});
+document.addEventListener('dragenter',function(e){if(!_ddHasFiles(e))return;e.preventDefault();ddCount++;if(!chatOpen)toggleChat();_ddHighlight(true);});
+document.addEventListener('dragleave',function(e){if(ddCount>0)ddCount--;if(ddCount<=0){ddCount=0;_ddHighlight(false);}});
+document.addEventListener('drop',function(e){
+if(!_ddHasFiles(e))return;
+e.preventDefault();ddCount=0;_ddHighlight(false);
+const file=e.dataTransfer.files&&e.dataTransfer.files[0];
+if(!file)return;
+pendingMedia={type:_ddType(file),file:file,name:file.name,size:file.size,mimeType:file.type};
+showMediaPreview();
+if(!chatOpen)toggleChat();
+showToast(translate('dd_attached')+file.name);
+const inp=document.getElementById('chat-input');if(inp)inp.focus();
+});
+})();

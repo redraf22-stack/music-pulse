@@ -251,6 +251,7 @@
 <div class="modal-field"><label>Динамики (вывод)</label><select class="modal-select" id="room-speaker-select"><option value="">По умолчанию</option></select></div>
 <div class="modal-field"><label>📷 Камера (видео)</label><select class="modal-select" id="room-camera-select"><option value="">По умолчанию</option></select></div>
 <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
+<button class="secondary" style="width:100%;" onclick="closeRoomDeviceSettings();openHotkeysModal();">⌨️ Сочетания клавиш</button>
 <button class="secondary" style="width:100%;" onclick="closeRoomDeviceSettings();openPersonalPlaylistsManager();">📚 Личные плейлисты</button>
 <div style="display:flex;justify-content:flex-end;gap:8px;">
 <button class="secondary" onclick="closeRoomDeviceSettings()">Отмена</button>
@@ -363,6 +364,7 @@
 <script src="js/helpers.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/core.js"></script>
+<script src="js/hotkeys.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/player.js"></script>
 <script src="js/chat.js"></script>

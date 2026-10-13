@@ -45,6 +45,9 @@ onChatWindowClosed: (cb) => ipcRenderer.on('chat-window-closed', () => cb()),
     getMusicDir: () => ipcRenderer.invoke('get-music-dir'),
     setMusicDir: (dir) => ipcRenderer.invoke('set-music-dir', dir),
     startMusicShare: () => ipcRenderer.invoke('start-music-share'),
-    getLanIp: () => ipcRenderer.invoke('get-lan-ip')
+    getLanIp: () => ipcRenderer.invoke('get-lan-ip'),
+    hkGlobalSet: (m) => ipcRenderer.invoke('hk-global-set', m),
+    hkGlobalPause: (p) => ipcRenderer.send('hk-global-pause', !!p),
+    onHkGlobal: (cb) => ipcRenderer.on('hk-global', (e, d) => cb(d))
     
 });

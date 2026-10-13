@@ -32,6 +32,8 @@ html,body{height:100%;}body{background:var(--bg);color:var(--text);display:flex;
 .fc-msgs::-webkit-scrollbar-thumb,.fc-emoji::-webkit-scrollbar-thumb{background:#4a4a4a;border-radius:5px;border:2px solid transparent;background-clip:padding-box;}
 .fc-msgs::-webkit-scrollbar-thumb:hover,.fc-emoji::-webkit-scrollbar-thumb:hover{background:#5e5e5e;background-clip:padding-box;}
 .fc-msgs,.fc-emoji{scrollbar-width:thin;scrollbar-color:#4a4a4a transparent;}
+/* Подсветка при перетаскивании файла */
+body.dd{outline:2px solid var(--accent);outline-offset:-2px;}
 </style></head><body>
 <div class="fc-head"><span class="fc-title">💬 Чат комнаты</span><button class="fc-btn" onclick="minWin()" title="Свернуть">—</button><button class="fc-btn" id="fs-btn" onclick="toggleFs()" title="Полный экран">⛶</button><button class="fc-btn fc-close" onclick="window.close()" title="Закрыть">✕</button></div>
 <div class="fc-msgs" id="m"><div class="fc-empty" id="empty">Нет сообщений</div></div>
@@ -96,4 +98,17 @@ if(window.electronAPI){
  if(window.electronAPI.onChatMaximized)window.electronAPI.onChatMaximized(s=>{const b=document.getElementById('fs-btn');if(b){b.textContent=s?'🗗':'⛶';b.title=s?'Оконный режим':'Полный экран';}});
  if(window.electronAPI.requestHistory){window.electronAPI.requestHistory();setTimeout(()=>{try{window.electronAPI.requestHistory();}catch(e){}},400);}
 }
+// Перетаскивание файла в чат — как 📎, но файл просто тащат в окно
+function _dd(e){return !!(e.dataTransfer&&e.dataTransfer.types&&Array.prototype.indexOf.call(e.dataTransfer.types,'Files')>=0);}
+let _ddN=0;
+document.addEventListener('dragover',e=>{if(!_dd(e))return;e.preventDefault();e.dataTransfer.dropEffect='copy';});
+document.addEventListener('dragenter',e=>{if(!_dd(e))return;e.preventDefault();_ddN++;document.body.classList.add('dd');});
+document.addEventListener('dragleave',e=>{if(_ddN>0)_ddN--;if(_ddN<=0){_ddN=0;document.body.classList.remove('dd');}});
+document.addEventListener('drop',e=>{
+ if(!_dd(e))return;
+ e.preventDefault();_ddN=0;document.body.classList.remove('dd');
+ const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+ if(!f)return;
+ onFile({target:{files:[f],value:''}}); // тот же путь, что и клик по 📎
+});
 </script></body></html>

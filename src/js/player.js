@@ -216,7 +216,6 @@ const data=await fetchJson(`/api/search?${params}`);if(my!==_searchToken)return;
 }catch(e){if(my!==_searchToken)return;clearSpin();console.error(e);showToast(translate('search_error'),true);}finally{if(my===_searchToken){clearSpin();if(btn){btn.disabled=false;btn.placeholder=origPh;}}}
 }
 function gotoPage(n){searchCurPage=n;renderSearchResults();}
-function renderPagination(currentPage,totalPages){const p=document.getElementById('pagination');if(getSearchViewMode()==='list'||totalPages<=1){p.style.display='none';return;}p.style.display='flex';p.innerHTML=`<button class="page-btn" onclick="searchMusic(${currentPage-1})" ${currentPage<=1?'disabled':''}>${escapeHtml(translate('back'))}</button><span class="page-info">${translate('page_of',{cur:currentPage,total:totalPages})}</span><button class="page-btn" onclick="searchMusic(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>${escapeHtml(translate('forward'))}</button>`;}
 function extractArtist(tr){if(!tr)return'?';if(typeof tr.artist==='object'&&tr.artist)return tr.artist.name||tr.artist||'?';return tr.artist||'?';}
 function getSearchViewMode(){try{return localStorage.getItem('mp_search_view')||'pages';}catch(e){return 'pages';}}
 function renderSearchResults(){

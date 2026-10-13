@@ -20,6 +20,10 @@ app.get('/debug', (req, res) => {
     });
 });
 
+// Без кэша: клиенты (в т.ч. друзья с других машин) всегда получают свежий код с сервера,
+// иначе браузер может отдать старый JS из кэша по эвристике Last-Modified.
+// Важно стоять ДО роутов и статики — иначе они отвечают без этого заголовка.
+app.use((req, res, next) => { res.setHeader('Cache-Control', 'no-cache'); next(); });
 app.get('/', (req, res) => res.sendFile(path.join(config.SRC_DIR, 'start.html')));
 app.get('/room', (req, res) => res.sendFile(path.join(config.SRC_DIR, 'index.html')));
 // ✅ Явная раздача js и css (дублируем static для надёжности)

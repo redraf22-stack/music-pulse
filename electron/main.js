@@ -78,6 +78,18 @@ function createWindow() {
       } catch (e) { callback({}); }
     });
     mainWindow.loadFile(path.join(__dirname, '../src/start.html'));
+    // Разрешаем рендеру только вход в комнату (/room — start.js). Остальная навигация
+    // блокируется: это гасит листание истории кнопками мыши «назад/вперёд»
+    // (иначе из комнаты кнопка «назад» уносит на стартовый экран).
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        try { if (new URL(url).pathname === '/room') return; } catch (e) {}
+        event.preventDefault();
+    });
+    // Страховка: историю чистим после каждой загрузки — мышь «назад/вперёд» физически
+    // нечего листать, даже если will-navigate на history-навигации не срабатывает.
+    mainWindow.webContents.on('did-finish-load', () => {
+        try { mainWindow.webContents.navigationHistory.clearHistory(); } catch (e) {}
+    });
     if (!process.argv.includes('--dev')) {
         let updateDownloaded = false;
         let updateDialogShown = false;
@@ -411,3 +423,54 @@ ipcMain.on('chat-forward', (e, msg) => { if (chatFloatWin && !chatFloatWin.isDes
 ipcMain.on('chat-history-push', (e, msgs) => { if (chatFloatWin && !chatFloatWin.isDestroyed()) chatFloatWin.webContents.send('chat-history-sync', msgs); });
 ipcMain.on('chat-send-from-floating', (e, text) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chat-do-send-text', String(text || '').slice(0, 500)); });
 ipcMain.on('chat-request-history', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chat-request-history'); });
+
+// ===== ГЛОБАЛЬНЫЕ ГОРЯЧИЕ КЛАВИШИ (поверх других приложений) =====
+// Главный процесс опрашивает нажатия через Win32 GetAsyncKeyState (koffi) ~33 раза/сек.
+// Это ОПРОС, а не перехват: клавиши не воруются у остальных программ, работает
+// удержание (PTT) и кнопки мыши «назад/вперёд» (VK_XBUTTON1/2) в любом окне.
+let hkGetKey = null, hkMapping = null, hkTimer = null, hkEdges = {}, hkPaused = false;
+function hkEnsureKoffi() {
+    if (hkGetKey !== null) return hkGetKey;
+    try {
+        const koffi = require('koffi');
+        hkGetKey = koffi.load('user32.dll').func('short GetAsyncKeyState(int vKey)');
+        console.log('[hk] глобальный опрос клавиш подключён (koffi)');
+    } catch (e) { console.log('[hk] koffi недоступен: ' + e.message); hkGetKey = false; }
+    return hkGetKey;
+}
+const HK_VK_MAP = { Space: 0x20, Escape: 0x1B, Tab: 0x09, Enter: 0x0D, Backspace: 0x08, Delete: 0x2E, Insert: 0x2D, Home: 0x24, End: 0x23, PageUp: 0x21, PageDown: 0x22, ArrowLeft: 0x25, ArrowUp: 0x26, ArrowRight: 0x27, ArrowDown: 0x28, CapsLock: 0x14, PrintScreen: 0x2C, ScrollLock: 0x91, Pause: 0x13, NumLock: 0x90, Minus: 0xBD, Equal: 0xBB, Comma: 0xBC, Period: 0xBE, Slash: 0xBF, Backslash: 0xDC, Semicolon: 0xBA, Quote: 0xDE, BracketLeft: 0xDB, BracketRight: 0xDD, Backquote: 0xC0, XButton1: 0x05, XButton2: 0x06, NumpadAdd: 0x6B, NumpadSubtract: 0x6D, NumpadMultiply: 0x6A, NumpadDivide: 0x6F, NumpadDecimal: 0x6E };
+function hkCodeToVk(code) {
+    if (!code) return 0;
+    if (/^Key[A-Z]$/.test(code)) return code.charCodeAt(3);
+    if (/^Digit[0-9]$/.test(code)) return code.charCodeAt(5);
+    const f = code.match(/^F([1-9]|1[0-2])$/); if (f) return 0x6F + parseInt(f[1], 10); // F1 = 0x70
+    const np = code.match(/^Numpad([0-9])$/); if (np) return 0x60 + parseInt(np[1], 10);
+    return HK_VK_MAP[code] || 0;
+}
+function hkPollTick() {
+    if (!hkMapping || !hkGetKey || hkPaused) return;
+    const down = v => !!(hkGetKey(v) & 0x8000);
+    const ctrl = down(0x11), alt = down(0x12), shift = down(0x10); // VK_CONTROL / VK_MENU / VK_SHIFT
+    ['ptt', 'mute', 'deafen'].forEach(a => {
+        const entry = hkMapping[a];
+        if (!entry || !entry.combo || !entry.combo.code) return;
+        if (a === 'ptt' && !entry.enabled) return;
+        const vk = hkCodeToVk(entry.combo.code);
+        if (!vk) return;
+        const hit = down(vk) && ctrl === !!entry.combo.ctrl && alt === !!entry.combo.alt && shift === !!entry.combo.shift;
+        const prev = !!hkEdges[a];
+        if (hit !== prev) {
+            hkEdges[a] = hit;
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('hk-global', { action: a, type: hit ? 'down' : 'up' });
+        }
+    });
+}
+ipcMain.handle('hk-global-set', (event, mapping) => {
+    hkMapping = mapping || null;
+    hkEdges = {};
+    if (!hkMapping) return { ok: false };
+    if (!hkEnsureKoffi()) return { ok: false };
+    if (!hkTimer) hkTimer = setInterval(hkPollTick, 30);
+    return { ok: true };
+});
+ipcMain.on('hk-global-pause', (event, p) => { hkPaused = !!p; hkEdges = {}; });

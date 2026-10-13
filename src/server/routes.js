@@ -43,6 +43,23 @@ module.exports = function (app, utils) {
         res.json({ dir: dir, count: tracks.length, sample: tracks.slice(0, 3).map(t => t.filename) });
     });
 
+    // Диагностика войса: клиент присылает строки лога, пишем в voice-diag.log (отладка без релизов)
+    const voiceDiagLog = path.join(require('./config.js').DATA_DIR, 'voice-diag.log');
+    app.post('/api/voice-diag', require('express').json({ limit: '64kb' }), (req, res) => {
+        let err = '', n = 0;
+        try {
+            const lines = (req.body && req.body.lines) || [];
+            if (Array.isArray(lines) && lines.length) {
+                n = lines.length;
+                let size = 0; try { size = fs.statSync(voiceDiagLog).size; } catch (e2) {}
+                if (size > 512 * 1024) fs.writeFileSync(voiceDiagLog, '');
+                fs.appendFileSync(voiceDiagLog, lines.map(String).slice(0, 60).join('\n') + '\n');
+            } else { err = 'no-lines body=' + JSON.stringify(req.body === undefined ? 'undefined' : req.body).slice(0, 200); }
+        } catch (e) { err = String((e && e.message) || e); }
+        if (err) console.warn('[voice-diag] write failed:', err);
+        res.json({ ok: !err, n: n, path: voiceDiagLog, err: err });
+    });
+
     const storage = multer.diskStorage({ destination: (r, f, cb) => cb(null, uploadsDir), filename: (r, f, cb) => cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(f.originalname)) });
     const upload = multer({ storage, limits: { fileSize: 1024 * 1024 * 1024 } });
     const searchLimiter = rateLimit({ windowMs: 60 * 1000, max: 120 });

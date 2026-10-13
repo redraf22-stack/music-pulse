@@ -126,7 +126,7 @@ const v=document.getElementById('vote-settings-btn');if(v)v.style.display=myRole
 function updateRegenBtnVisibility(){const b=document.getElementById('regen-code-btn');if(b)b.style.display=myRole==='admin'?'inline-block':'none';}
 function updateRandomButtonVisibility(){const b=document.getElementById('random-toggle-btn');if(b)b.style.display=(myRole==='admin'||isMod)?'flex':'none';}
 function updateForceStatusBanner(){const b=document.getElementById('force-status-banner');if(!b)return;if(forceMuted&&forceDeafened){b.className='force-status-banner muted';b.innerHTML='🎤̶ ̶ '+translate('muted_by_admin')+' & '+translate('deafened_by_admin');}else if(forceMuted){b.className='force-status-banner muted';b.innerHTML='🎤̶ '+translate('muted_by_admin');}else if(forceDeafened){b.className='force-status-banner deafened';b.innerHTML='🎧̶ '+translate('deafened_by_admin');}else{b.className='force-status-banner';b.innerHTML='';}}
-function updateVoiceControlsInPlayer(){const m=document.getElementById('vc-mic'),d=document.getElementById('vc-deafen');if(m&&d){if(isInVoice){m.style.display='block';d.style.display='block';const em=isMuted||forceMuted,ed=isDeafened||forceDeafened;m.className=em?'voice-ctrl-btn muted':'voice-ctrl-btn';m.innerHTML='🎤';m.title=forceMuted?translate('muted_by_admin'):(em?translate('self_muted'):translate('mute_action'));d.className=ed?'voice-ctrl-btn deafened':'voice-ctrl-btn';d.innerHTML='🎧';d.title=forceDeafened?translate('deafened_by_admin'):(ed?translate('self_deafened'):translate('deafen_action'));}else{m.style.display='none';d.style.display='none';}}updateForceStatusBanner();}
+function updateVoiceControlsInPlayer(){const m=document.getElementById('vc-mic'),d=document.getElementById('vc-deafen');if(m&&d){if(isInVoice){m.style.display='block';d.style.display='block';const pttSilent=typeof hkPttOn==='function'&&hkPttOn()&&!(typeof pttHeld!=='undefined'&&pttHeld);const em=isMuted||forceMuted||pttSilent,ed=isDeafened||forceDeafened;m.className=em?'voice-ctrl-btn muted':'voice-ctrl-btn';m.innerHTML='🎤';m.title=forceMuted?translate('muted_by_admin'):(isMuted?translate('self_muted'):(pttSilent?translate('ptt_hold_hint',{key:comboLabel(hkCombo('ptt'))}):translate('mute_action')));d.className=ed?'voice-ctrl-btn deafened':'voice-ctrl-btn';d.innerHTML='🎧';d.title=forceDeafened?translate('deafened_by_admin'):(ed?translate('self_deafened'):translate('deafen_action'));}else{m.style.display='none';d.style.display='none';}}updateForceStatusBanner();}
 function syncSelfVoiceState(){if(!isInVoice)return;socket.emit('self-voice-state',{muted:isMuted,deafened:isDeafened});}
 function toggleManageMode(){manageMode=!manageMode;const b=document.getElementById('manage-toggle-btn');if(b){b.style.background=manageMode?'var(--danger)':'';b.style.color=manageMode?'white':'';b.style.borderColor=manageMode?'var(--danger)':'';}if(lastUsersList)renderUsersList(lastUsersList);}
 function renderUsersList(users){
@@ -365,21 +365,6 @@ else{showToast('💾 Сохранено');}
 });
 closeRoomDeviceSettings();
 }
-async function refreshMyShare(){
-if(!(window.electronAPI&&window.electronAPI.startMusicShare))return false;
-try{
-const s=await window.electronAPI.startMusicShare();
-if(s&&s.ok){
-const ip=await window.electronAPI.getLanIp();
-const r=await fetch('http://localhost:'+s.port+'/list.json');
-const list=await r.json();
-socket.emit('share-music',{base:'http://'+ip+':'+s.port,tracks:list});
-window.iSharedMusic=true;
-return true;
-}
-}catch(e){}
-return false;
-}
 // ===== Просмотр переданных личных плейлистов участника =====
 let plBrowseNick=null,plBrowsePlaylist=null,plColMode='all';
 function plTracksSearch(v){if(plColMode==='all')renderGlobalTracks(v);else if(plColMode==='tracks')renderSharedPlTracks(v);}
@@ -507,7 +492,6 @@ function ownerHasSelected(nick){return ownerKeys(nick).some(k=>plEdit&&plEdit.se
 function ownerSetAll(nick,on){ownerKeys(nick).forEach(k=>{if(on)plEdit.selected[k]=true;else delete plEdit.selected[k];});}
 function plKeysForPlaylist(nick,p){const mode=window._sharedMode;const ks=[];(p.files||[]).forEach(f=>ks.push(mode==='local'?('local|'+f):('shared|'+nick+'|'+f)));(p.urls||[]).forEach(u=>ks.push('url|'+nick+'|'+u));return ks;}
 function migrateIncludeAllToSelected(){if(!plEdit||!plEdit.includeAll)return;Object.keys(plEdit.includeAll).forEach(n=>{if(plEdit.includeAll[n]){ownerKeys(n).forEach(k=>{if(!plEdit.excluded[k])plEdit.selected[k]=true;else delete plEdit.selected[k];});plEdit.includeAll[n]=false;}});}
-function refreshPlColumns(){renderPlUsers(lastUsersList||[]);if(window._sharedPlList&&plBrowseNick)renderSharedPlaylistsList(plBrowseNick,window._sharedPlList);}
 function enableMarquee(span){
 span.addEventListener('mouseenter',()=>{
 if(span.dataset.mqBusy)return;
