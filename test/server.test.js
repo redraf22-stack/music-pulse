@@ -51,6 +51,10 @@ class C {
 
 async function main() {
     // Поднимаем сервер приложения на тестовом порту (HTTP-режим через временный DATA_DIR)
+    // PeerServer (порт 3002) тесту не нужен, а занимать порты под запущенным приложением нельзя —
+    // подменяем модуль целиком через require.cache (exports у него на геттерах, простая перезапись не работает)
+    const peerPath = require.resolve('peer');
+    require.cache[peerPath] = { id: peerPath, filename: peerPath, loaded: true, exports: { PeerServer: () => null, ExpressPeerServer: () => null } };
     const serverMod = require('../src/server/index.js');
     await new Promise(res => serverMod.server.listen(PORT, '127.0.0.1', res));
     console.log('тестовый сервер поднят на :' + PORT);
