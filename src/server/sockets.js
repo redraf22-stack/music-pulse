@@ -1,6 +1,7 @@
 module.exports = function (io, R, utils) {
     const PL = require('./playlists.js');
     const rooms = R.rooms;
+    const joinFails = new Map(); const JOIN_FAIL_LIMIT = 10, JOIN_FAIL_WINDOW = 5 * 60 * 1000;
     io.on('connection', (socket) => {
         socket.lastVoteTime = 0; socket.peerId = null; socket.lastActivity = Date.now();
         const clientIp = socket.handshake.address; socket.clientIp = clientIp;
@@ -24,13 +25,18 @@ if(rooms[code].playlists[0]){ const _cp=rooms[code].playlists[0]; if(hostAutoSha
             cb({ code, role: 'admin', nickname: name, voteCooldown: 0, voteDuration: 15, voiceEnabled: false, lanOpen: false });
         });
         socket.on('join-room', ({ code, nickname }, cb) => {
+            const now = Date.now();
+            const fails = (joinFails.get(clientIp) || []).filter(t => now - t < JOIN_FAIL_WINDOW);
+            if (fails.length >= JOIN_FAIL_LIMIT) { joinFails.set(clientIp, fails); return cb({ error: 'Слишком много попыток входа. Подожди пару минут.' }); }
+            const joinFail = (msg) => { fails.push(now); joinFails.set(clientIp, fails); cb({ error: msg }); };
             const room = rooms[String(code || '').toUpperCase()];
-            if (!room) return cb({ error: 'Комната не найдена' });
+            if (!room) return joinFail('Комната не найдена');
             const name = nickname?.trim() || 'Аноним';
-            if (room.bannedIps && room.bannedIps.includes(clientIp)) return cb({ error: 'banned' });
+            if (room.bannedIps && room.bannedIps.includes(clientIp)) return joinFail('banned');
             const exAdm = room.users.find(u => u.isAdmin);
             const reAdm = !!(exAdm && exAdm.name.toLowerCase() === name.toLowerCase());
-            if (!reAdm && room.users.some(u => u.name.toLowerCase() === name.toLowerCase())) return cb({ error: 'Этот никнейм уже занят' });
+            if (!reAdm && room.users.some(u => u.name.toLowerCase() === name.toLowerCase())) return joinFail('Этот никнейм уже занят');
+            joinFails.delete(clientIp);
             socket.join(room && String(code).toUpperCase()); socket.roomCode = String(code).toUpperCase();
             socket.nickname = name; socket.isMod = false; socket.isVip = false; socket.isAdmin = reAdm;
             if (reAdm) { exAdm.id = socket.id; room.adminId = socket.id; room.adminDisconnectedAt = null; }
@@ -123,8 +129,8 @@ socket.on('request-screen-from', ({ requesterSocketId }) => {
         handleScreenCall(call);
     } catch (e) { console.error('[request-screen-from]', e); }
 });
-        socket.on('kick-user', id => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const u = room.users.find(x => x.id === id); if (!u || u.isAdmin) return; const ts = io.sockets.sockets.get(id); if (ts) { ts.emit('kicked'); ts.leave(socket.roomCode); } room.users = room.users.filter(x => x.id !== id); delete room.voiceStates[id]; R.broadcastUsers(socket.roomCode); });
-        socket.on('ban-user', id => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const u = room.users.find(x => x.id === id); if (!u || u.isAdmin) return; const ts = io.sockets.sockets.get(id); if (ts) { if (!room.bannedIps) room.bannedIps = []; if (!room.bannedIps.includes(ts.clientIp)) room.bannedIps.push(ts.clientIp); ts.emit('banned'); ts.leave(socket.roomCode); } room.users = room.users.filter(x => x.id !== id); delete room.voiceStates[id]; R.broadcastUsers(socket.roomCode); });
+        socket.on('kick-user', id => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const u = room.users.find(x => x.id === id); if (!u || u.isAdmin) return; const ts = io.sockets.sockets.get(id); room.users = room.users.filter(x => x.id !== id); delete room.voiceStates[id]; io.to(socket.roomCode).except(id).emit('user-left-voice', { id, peerId: ts ? ts.peerId : null }); if (ts) { ts.emit('kicked'); ts.leave(socket.roomCode); } R.broadcastUsers(socket.roomCode); });
+        socket.on('ban-user', id => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; const u = room.users.find(x => x.id === id); if (!u || u.isAdmin) return; const ts = io.sockets.sockets.get(id); room.users = room.users.filter(x => x.id !== id); delete room.voiceStates[id]; io.to(socket.roomCode).except(id).emit('user-left-voice', { id, peerId: ts ? ts.peerId : null }); if (ts) { if (!room.bannedIps) room.bannedIps = []; if (!room.bannedIps.includes(ts.clientIp)) room.bannedIps.push(ts.clientIp); ts.emit('banned'); ts.leave(socket.roomCode); } R.broadcastUsers(socket.roomCode); });
         socket.on('toggle-voice-chat', en => { if (!socket.isAdmin || !socket.roomCode) return; const room = rooms[socket.roomCode]; if (!room) return; room.voiceEnabled = !!en; if (!en) { room.voiceStates = {}; io.to(socket.roomCode).emit('voice-chat-disabled'); } io.to(socket.roomCode).emit('voice-status', room.voiceEnabled); R.broadcastUsers(socket.roomCode); });
         socket.on('get-peer-id', cb => cb(socket.peerId));
         socket.on('join-voice', () => {

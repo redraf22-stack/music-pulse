@@ -1,12 +1,15 @@
 {
   "name": "musicpulse",
-  "version": "2.0.20",
+  "version": "2.0.21",
   "description": "MusicPulse - совместное прослушивание музыки в локальной сети",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "server": "node src/server/index.js",
+    "test": "node test/hotkeys.test.js && node test/server.test.js",
+    "test:hotkeys": "node test/hotkeys.test.js",
+    "test:server": "node test/server.test.js",
     "postinstall": "node scripts/fix-peer.js",
     "build": "node scripts/fix-peer.js && electron-builder",
     "build:win": "node scripts/fix-peer.js && electron-builder --win",
@@ -41,6 +44,7 @@
     "files": [
       "**/*",
       "!dist/**",
+      "!test/**",
       "!src/music/**",
       "!src/uploads/**",
       "!src/urlcache/**",

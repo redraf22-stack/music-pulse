@@ -42,16 +42,11 @@ function cleanupAudioResources() {
 
 window.addEventListener('beforeunload', cleanupAudioResources);
 window.addEventListener('unload', cleanupAudioResources);
-// ===== Диагностика войса: консоль + файл на сервере (voice-diag.log), чтобы ловить поломки без релизов =====
-let _vdiagBuf=[];let _vdiagTimer=null;
+// ===== Диагностика войса: только в консоль разработчика (F12), наружу ничего не отправляется =====
 function VDBG(ev,detail,extra){
 try{
 const who=(myNickname||'?')+'/'+String(mySocketId||'-').slice(-5);
-const line=new Date().toISOString().slice(11,23)+' '+who+' '+ev+(detail!==undefined?' '+JSON.stringify(detail):'')+(extra!==undefined?' '+JSON.stringify(extra):'');
-console.log('[voice-diag] '+line);
-_vdiagBuf.push(line);
-if(_vdiagBuf.length>40)_vdiagBuf.shift();
-if(!_vdiagTimer){_vdiagTimer=setTimeout(()=>{_vdiagTimer=null;const b=_vdiagBuf.slice();_vdiagBuf=[];fetch('/api/voice-diag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines:b}),keepalive:true}).catch(()=>{});},3000);}
+console.log('[voice-diag] '+new Date().toISOString().slice(11,23)+' '+who+' '+ev+(detail!==undefined?' '+JSON.stringify(detail):'')+(extra!==undefined?' '+JSON.stringify(extra):''));
 }catch(e){}
 }
 function volStore(){try{return JSON.parse(localStorage.getItem('mp_volumes')||'{}');}catch(e){return{};}}
