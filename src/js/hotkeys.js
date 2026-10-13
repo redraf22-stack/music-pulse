@@ -7,9 +7,12 @@
 const HK_DEFAULTS={
 ptt:{enabled:false,combo:{code:'KeyV',ctrl:false,alt:false,shift:false}},
 mute:{combo:{code:'KeyM',ctrl:false,alt:false,shift:false}},
-deafen:{combo:{code:'KeyB',ctrl:false,alt:false,shift:false}}
+deafen:{combo:{code:'KeyB',ctrl:false,alt:false,shift:false}},
+playpause:{combo:{code:'F8',ctrl:false,alt:false,shift:false}},
+next:{combo:{code:'F9',ctrl:false,alt:false,shift:false}},
+prev:{combo:{code:'F7',ctrl:false,alt:false,shift:false}}
 };
-const HK_ACTIONS=['ptt','mute','deafen'];
+const HK_ACTIONS=['ptt','mute','deafen','playpause','next','prev'];
 const HK_MODIFIER_CODES=['ControlLeft','ControlRight','ShiftLeft','ShiftRight','AltLeft','AltRight','MetaLeft','MetaRight'];
 const HK_KEY_NAMES={Space:'Пробел',Escape:'Esc',Tab:'Tab',Enter:'Enter',Backspace:'Backspace',Delete:'Del',Insert:'Ins',Home:'Home',End:'End',PageUp:'PgUp',PageDown:'PgDn',ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',CapsLock:'Caps',PrintScreen:'PrtSc',ScrollLock:'ScrLk',Pause:'Pause',NumLock:'NumLk',Comma:',',Period:'.',Slash:'/',Backslash:'\\',Minus:'-',Equal:'=',Quote:"'",Semicolon:';',BracketLeft:'[',BracketRight:']',Backquote:'`',XButton1:'Мышь ←',XButton2:'Мышь →'};
 let _hkCfg=null,_hkCapturing=null,pttHeld=false;
@@ -57,6 +60,12 @@ showToast(translate('join_voice_first'),true);return false;
 }
 function _hkMicGate(){if(typeof applyMicGate==='function'){try{applyMicGate();}catch(e){}}}
 function _hkVoiceUi(){if(typeof updateVoiceControlsInPlayer==='function'){try{updateVoiceControlsInPlayer();}catch(e){}}}
+// Медиадействия: вне комнаты (нет плеера) — тихая нет-операция
+function _hkMediaAction(a){
+if(a==='playpause'&&typeof togglePlay==='function')togglePlay();
+else if(a==='next'&&typeof playNextTrack==='function')playNextTrack();
+else if(a==='prev'&&typeof playPrevTrack==='function')playPrevTrack();
+}
 
 // ===== Диспетчер клавиш =====
 document.addEventListener('keydown',e=>{
@@ -82,6 +91,9 @@ e.preventDefault();
 if(_hkVoiceOk()&&typeof toggleDeafen==='function')toggleDeafen();
 return;
 }
+if(comboMatches(cfg.playpause.combo,e)){e.preventDefault();_hkMediaAction('playpause');return;}
+if(comboMatches(cfg.next.combo,e)){e.preventDefault();_hkMediaAction('next');return;}
+if(comboMatches(cfg.prev.combo,e)){e.preventDefault();_hkMediaAction('prev');return;}
 });
 // Отпускание PTT: сверяемся только по code — иначе можно "зависнуть",
 // если модификатор отпустили раньше основной клавиши.
@@ -113,6 +125,9 @@ if(type==='down'){
 if(cfg.ptt.enabled&&comboMatches(cfg.ptt.combo,ev)){if(!pttHeld){pttHeld=true;_hkMicGate();_hkVoiceUi();}return;}
 if(comboMatches(cfg.mute.combo,ev)){if(_hkVoiceOk()&&typeof toggleMic==='function')toggleMic();return;}
 if(comboMatches(cfg.deafen.combo,ev)){if(_hkVoiceOk()&&typeof toggleDeafen==='function')toggleDeafen();return;}
+if(comboMatches(cfg.playpause.combo,ev)){_hkMediaAction('playpause');return;}
+if(comboMatches(cfg.next.combo,ev)){_hkMediaAction('next');return;}
+if(comboMatches(cfg.prev.combo,ev)){_hkMediaAction('prev');return;}
 }else if(pttHeld&&code===cfg.ptt.combo.code){pttHeld=false;_hkMicGate();_hkVoiceUi();}
 }
 
@@ -206,7 +221,10 @@ if(!box)return;
 box.innerHTML=
 _hkRow('🎙',translate('hk_ptt_row'),'ptt','<label class="hk-check"><input type="checkbox" id="hk-ptt-check" onchange="hkSetPtt(this.checked)">'+translate('hk_ptt_check')+'</label>')
 +_hkRow('🔇',translate('hk_mute_row'),'mute')
-+_hkRow('🎧',translate('hk_deafen_row'),'deafen');
++_hkRow('🎧',translate('hk_deafen_row'),'deafen')
++_hkRow('⏯️',translate('hk_playpause_row'),'playpause')
++_hkRow('⏭️',translate('hk_next_row'),'next')
++_hkRow('⏮️',translate('hk_prev_row'),'prev');
 HK_ACTIONS.forEach(a=>{
 const b=document.getElementById('hk-btn-'+a);
 if(!b)return;
@@ -251,7 +269,7 @@ if(_hkCapturing)_hkEndCapture(); // иначе глобальный опрос �
 function hkSyncGlobal(){
 if(!(window.electronAPI&&window.electronAPI.hkGlobalSet))return; // браузер/старые версии — локальный режим
 const cfg=hkLoad();
-const m={ptt:{combo:cfg.ptt.combo,enabled:!!cfg.ptt.enabled},mute:{combo:cfg.mute.combo},deafen:{combo:cfg.deafen.combo}};
+const m={ptt:{combo:cfg.ptt.combo,enabled:!!cfg.ptt.enabled},mute:{combo:cfg.mute.combo},deafen:{combo:cfg.deafen.combo},playpause:{combo:cfg.playpause.combo},next:{combo:cfg.next.combo},prev:{combo:cfg.prev.combo}};
 Promise.resolve(window.electronAPI.hkGlobalSet(m)).then(r=>{_hkGlobalActive=!!(r&&r.ok);}).catch(()=>{_hkGlobalActive=false;});
 }
 function _hkGlobalEvent(d){
@@ -265,6 +283,7 @@ if(typeof document!=='undefined'&&document.hasFocus&&document.hasFocus()&&_hkEdi
 if(d.action==='ptt'){if(!pttHeld){pttHeld=true;_hkMicGate();_hkVoiceUi();}return;}
 if(d.action==='mute'){if(_hkVoiceOk()&&typeof toggleMic==='function')toggleMic();return;}
 if(d.action==='deafen'){if(_hkVoiceOk()&&typeof toggleDeafen==='function')toggleDeafen();return;}
+if(d.action==='playpause'||d.action==='next'||d.action==='prev'){_hkMediaAction(d.action);return;}
 }
 if(window.electronAPI&&window.electronAPI.onHkGlobal)window.electronAPI.onHkGlobal(_hkGlobalEvent);
 hkSyncGlobal();

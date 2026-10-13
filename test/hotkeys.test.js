@@ -36,6 +36,9 @@ assert.strictEqual(cfg.ptt.enabled, false, 'PTT по умолчанию выкл
 assert.strictEqual(cfg.mute.combo.code, 'KeyM', 'мьют по умолчанию = M');
 assert.strictEqual(cfg.deafen.combo.code, 'KeyB', 'глушение по умолчанию = B');
 assert.strictEqual(cfg.ptt.combo.code, 'KeyV', 'PTT по умолчанию = V');
+assert.strictEqual(cfg.playpause.combo.code, 'F8', 'пауза/продолжить по умолчанию = F8');
+assert.strictEqual(cfg.next.combo.code, 'F9', 'следующий трек по умолчанию = F9');
+assert.strictEqual(cfg.prev.combo.code, 'F7', 'предыдущий трек по умолчанию = F7');
 
 // 2. comboLabel
 assert.strictEqual(comboLabel({ code: 'KeyV', ctrl: false, alt: false, shift: false }), 'V');
@@ -146,4 +149,26 @@ assert.strictEqual(__hk.pttHeld, true, 'IPC PTT-down ставит удержан
 _hkGlobalEvent({ action: 'ptt', type: 'up' });
 assert.strictEqual(__hk.pttHeld, false, 'IPC PTT-up снимает удержание');
 
-console.log('ALL 15 TESTS PASSED');
+// 16. Медиадействия: F8/F9/F7 управляют плеером (локальный диспетчер + IPC-канал)
+let mediaLog = [];
+global.togglePlay = () => mediaLog.push('playpause');
+global.playNextTrack = () => mediaLog.push('next');
+global.playPrevTrack = () => mediaLog.push('prev');
+listeners.keydown(key('F8'));
+listeners.keydown(key('F9'));
+listeners.keydown(key('F7'));
+assert.deepStrictEqual(mediaLog, ['playpause', 'next', 'prev'], 'F8/F9/F7 → пауза/следующий/предыдущий');
+mediaLog = [];
+_hkGlobalEvent({ action: 'playpause', type: 'down' });
+_hkGlobalEvent({ action: 'next', type: 'down' });
+_hkGlobalEvent({ action: 'prev', type: 'down' });
+assert.deepStrictEqual(mediaLog, ['playpause', 'next', 'prev'], 'IPC-события медиадействий');
+// захват: F8 занята паузой — мьют не может её забрать
+hkStartCapture('mute');
+toasts.length = 0;
+_hkCaptureKey(key('F8'));
+assert.strictEqual(hkCombo('mute').code, 'KeyM', 'конфликт с медиа-клавишей — мьют остался на M');
+assert.ok(toasts.some(t => t.e && t.m.indexOf('hk_name_playpause') >= 0), 'тост о конфликте указывает на паузу');
+delete global.togglePlay; delete global.playNextTrack; delete global.playPrevTrack;
+
+console.log('ALL TESTS PASSED (16 блоков, медиа включительно)');

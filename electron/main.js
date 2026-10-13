@@ -451,7 +451,7 @@ function hkPollTick() {
     if (!hkMapping || !hkGetKey || hkPaused) return;
     const down = v => !!(hkGetKey(v) & 0x8000);
     const ctrl = down(0x11), alt = down(0x12), shift = down(0x10); // VK_CONTROL / VK_MENU / VK_SHIFT
-    ['ptt', 'mute', 'deafen'].forEach(a => {
+    ['ptt', 'mute', 'deafen', 'playpause', 'next', 'prev'].forEach(a => {
         const entry = hkMapping[a];
         if (!entry || !entry.combo || !entry.combo.code) return;
         if (a === 'ptt' && !entry.enabled) return;
