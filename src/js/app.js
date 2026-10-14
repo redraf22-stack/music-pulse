@@ -10,11 +10,10 @@ if(window.electronAPI&&window.electronAPI.onMediaKey)window.electronAPI.onMediaK
 const bootMode=urlParams.get('mode');
 const bootNick=(urlParams.get('nick')||'').trim();
 const bootCode=(urlParams.get('code')||'').trim().toUpperCase();
-let techOpen=false,voteOpen=false;
+let voteOpen=false;
 let autoRequestTracks=false;
 function saveRoomPrefs(){if(myRole!=='admin')return;try{localStorage.setItem('mp_room_prefs_'+myNickname,JSON.stringify({lanOpen:isLanOpen,voiceEnabled:voiceChatEnabled,voteCooldown:voteCooldown,voteDuration:voteDuration}));}catch(e){}}
 function applyRoomPrefs(){if(myRole!=='admin')return;try{const p=JSON.parse(localStorage.getItem('mp_room_prefs_'+myNickname)||'null');if(!p)return;if(p.lanOpen&&!isLanOpen)socket.emit('toggle-lan');if(p.voiceEnabled&&!voiceChatEnabled)socket.emit('toggle-voice-chat',true);if((p.voteCooldown!==undefined&&p.voteCooldown!==voteCooldown)||(p.voteDuration!==undefined&&p.voteDuration!==voteDuration))socket.emit('update-settings',{voteCooldown:p.voteCooldown!==undefined?p.voteCooldown:voteCooldown,voteDuration:p.voteDuration!==undefined?p.voteDuration:voteDuration});}catch(e){}}
-function toggleTechSettings(){techOpen=!techOpen;const b=document.getElementById('tech-settings-btn');const p=document.getElementById('tech-settings-panel');if(b)b.classList.toggle('open',techOpen);if(p)p.style.display=techOpen?'flex':'none';if(!techOpen){voteOpen=false;const vb=document.getElementById('vote-settings-btn');const vp=document.getElementById('admin-controls');if(vb)vb.classList.remove('open');if(vp)vp.style.display='none';}}
 function toggleVoteSettings(){if(myRole!=='admin')return;voteOpen=!voteOpen;const b=document.getElementById('vote-settings-btn');const p=document.getElementById('admin-controls');if(b)b.classList.toggle('open',voteOpen);if(p)p.style.display=voteOpen?'block':'none';}
 function toggleAutoRequest(){
 autoRequestTracks=!autoRequestTracks;
@@ -101,7 +100,7 @@ const msg=myRole==='admin'?translate('leave_admin_confirm'):translate('leave_use
 showConfirm('🚪',translate('leave_room_title'),msg,function(){
 try{socket.emit('leave-room');}catch(e){}
 if(window.electronAPI&&window.electronAPI.closeFloatingWindows)window.electronAPI.closeFloatingWindows({});
-techOpen=false;voteOpen=false;
+voteOpen=false;
 const tp=document.getElementById('tech-settings-panel');if(tp)tp.style.display='none';
 const vp=document.getElementById('admin-controls');if(vp)vp.style.display='none';
 setTimeout(backToStart,100);
@@ -124,7 +123,6 @@ function updateVoiceToggleButton(){const b=document.getElementById('voice-chat-t
 function updateVoiceEntryButton(){const b=document.getElementById('voice-entry-btn');if(!voiceChatEnabled){b.style.display='none';return;}b.style.display='flex';b.disabled=false;isLeaving=false;b.className=isInVoice?'voice-entry-btn leave':'voice-entry-btn join';b.innerHTML=isInVoice?translate('leave_voice'):translate('join_voice');}
 function updateManageBtnVisibility(){
 const m=document.getElementById('manage-toggle-btn');if(m)m.style.display=myRole==='admin'?'inline-block':'none';
-const t=document.getElementById('tech-settings-btn');if(t)t.style.display=(myRole==='admin'||isMod)?'flex':'none';
 const v=document.getElementById('vote-settings-btn');if(v)v.style.display=myRole==='admin'?'flex':'none';
 }
 function updateRegenBtnVisibility(){const b=document.getElementById('regen-code-btn');if(b)b.style.display=myRole==='admin'?'inline-block':'none';}

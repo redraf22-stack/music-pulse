@@ -94,7 +94,7 @@ const prevIdentity=currentTrackName+'|'+currentTrackArtist;
 const identityChanged=trackIdentity!==prevIdentity;
 const urlChanged=ns&&audio.src!==ns;
 if(ns&&(urlChanged||identityChanged)){
-trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';
+trackChanging=true;currentTrackName=state.trackName||'';currentTrackArtist=state.trackArtist||'';const arrivedAt=Date.now()+serverTimeOffset; // момент ПОЛУЧЕНИЯ состояния — позиция старта считается от него (см. onReady)
 audio.pause();audio.src=ns;audio.load();
 if(_trackLoadAbort)_trackLoadAbort.abort();
 const _ac=new AbortController();_trackLoadAbort=_ac;const _mySrc=ns;
@@ -104,8 +104,10 @@ audio.addEventListener('error',()=>{clearTimeout(_skipTimer);if(trackChanging&&a
 const onReady=()=>{
 if(_trackLoadAbort!==_ac)return;
 if(audio.readyState<2){setTimeout(onReady,100);return;}
-const now=Date.now()+serverTimeOffset;
-const timeSinceStart=now-(syncStartedAt||now);
+// Позиция считается от МОМЕНТА ПОЛУЧЕНИЯ состояния (arrivedAt), а не от момента
+// готовности файла: иначе время загрузки mp3 (нередко >400мс) выглядело бы как
+// «трек уже играет» — новый трек начинался бы не с начала, а с середины вступления.
+const timeSinceStart=arrivedAt-(syncStartedAt||arrivedAt);
 const jumped=timeSinceStart>SYNC_BUFFER_MS;
 if(jumped&&audio.duration){try{audio.currentTime=Math.min(timeSinceStart/1000,Math.max(0,audio.duration-0.1));}catch(e){}}
 else{try{audio.currentTime=0;}catch(e){}}
@@ -116,7 +118,10 @@ setTimeout(()=>{
 if(_trackLoadAbort!==_ac)return; // трек уже отменён (быстрое next) — не играем чужим таймером
 if(userPaused){audio.pause();return;} // пауза нажата в окне буфера — уважаем текущее намерение, а не захваченное
 audio.play().then(()=>{
-if((myRole==='admin'||isMod)&&jumped)socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});
+// Админ/мод — источник истины: после ФАКТИЧЕСКОГО старта звука пересылаем позицию,
+// сервер пересчитает startedAt. Иначе время загрузки файла у всех разное, и через
+// пару секунд drift-коррекция подхватывает отстающих рывком («подлагивает»).
+if((myRole==='admin'||isMod))socket.emit('update-state',{playing:true,currentTime:audio.currentTime||0});
 }).catch(()=>{});
 },delay);
 }else{audio.pause();}

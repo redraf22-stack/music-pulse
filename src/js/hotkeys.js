@@ -191,7 +191,6 @@ const HK_MODAL_CSS=[
 '#hotkeys-modal .hk-title{margin:0 0 8px;font-size:19px;color:var(--accent,#1db954);}',
 '#hotkeys-modal .hk-hint{font-size:11.5px;color:#9a9a9a;line-height:1.55;margin-bottom:14px;background:#242424;border:1px solid var(--border,#333);border-radius:8px;padding:9px 11px;}',
 '#hotkeys-modal .hk-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--input-bg,#2a2a2a);border:1px solid var(--border,#333);border-radius:10px;margin-bottom:10px;}',
-'#hotkeys-modal .hk-ico{font-size:18px;line-height:1;width:22px;text-align:center;flex-shrink:0;}',
 '#hotkeys-modal .hk-label{flex:1;min-width:0;}',
 '#hotkeys-modal .hk-name{font-size:13px;color:#eee;font-weight:600;}',
 '#hotkeys-modal .hk-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#9a9a9a;cursor:pointer;margin-top:7px;}',
@@ -208,9 +207,10 @@ const HK_MODAL_CSS=[
 '#hotkeys-modal .hk-done{padding:9px 24px;border-radius:8px;border:none;background:var(--accent,#1db954);color:#000;font-weight:700;font-size:13px;cursor:pointer;transition:.15s;font-family:inherit;}',
 '#hotkeys-modal .hk-done:hover{filter:brightness(1.1);}'
 ].join('\n');
-function _hkRow(icon,label,action,extra){
+function _hkRow(label,action,extra){
+// Без эмодзи-иконки слева: дублировало эмодзи в подписи, а медиа-эмодзи (⏯️⏭️⏮️)
+// на Windows — синие квадраты, не вписывающиеся в стилистику приложения.
 return '<div class="hk-row">'
-+'<span class="hk-ico">'+icon+'</span>'
 +'<div class="hk-label"><div class="hk-name">'+label+'</div>'+(extra||'')+'</div>'
 +'<button id="hk-btn-'+action+'" class="hk-key" onclick="hkStartCapture(\''+action+'\')" title="'+translate('hk_press_key')+'"></button>'
 +'</div>';
@@ -219,12 +219,12 @@ function renderHotkeysModal(){
 const box=document.getElementById('hk-rows');
 if(!box)return;
 box.innerHTML=
-_hkRow('🎙',translate('hk_ptt_row'),'ptt','<label class="hk-check"><input type="checkbox" id="hk-ptt-check" onchange="hkSetPtt(this.checked)">'+translate('hk_ptt_check')+'</label>')
-+_hkRow('🔇',translate('hk_mute_row'),'mute')
-+_hkRow('🎧',translate('hk_deafen_row'),'deafen')
-+_hkRow('⏯️',translate('hk_playpause_row'),'playpause')
-+_hkRow('⏭️',translate('hk_next_row'),'next')
-+_hkRow('⏮️',translate('hk_prev_row'),'prev');
+_hkRow(translate('hk_ptt_row'),'ptt','<label class="hk-check"><input type="checkbox" id="hk-ptt-check" onchange="hkSetPtt(this.checked)">'+translate('hk_ptt_check')+'</label>')
++_hkRow(translate('hk_mute_row'),'mute')
++_hkRow(translate('hk_deafen_row'),'deafen')
++_hkRow(translate('hk_playpause_row'),'playpause')
++_hkRow(translate('hk_next_row'),'next')
++_hkRow(translate('hk_prev_row'),'prev');
 HK_ACTIONS.forEach(a=>{
 const b=document.getElementById('hk-btn-'+a);
 if(!b)return;

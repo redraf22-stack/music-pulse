@@ -91,12 +91,15 @@ function shEnsure(){
             '#settings-hub .sh-close{background:none;border:none;color:#888;font-size:16px;cursor:pointer;padding:4px 6px;line-height:1;}',
             '#settings-hub .sh-close:hover{color:#fff;}',
             '#settings-hub .sh-body{flex:1;display:flex;min-height:0;}',
-            '#settings-hub .sh-nav{width:225px;flex-shrink:0;background:#191919;border-right:1px solid var(--border,#2c2c2c);overflow-y:auto;padding:10px 0;}',
+            '#settings-hub .sh-nav{width:225px;flex-shrink:0;background:var(--bg,#121212);border-right:1px solid var(--border,#2c2c2c);overflow-y:auto;padding:10px 0;}',
             '#settings-hub .sh-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13.5px;color:#cfcfcf;cursor:pointer;border-left:3px solid transparent;user-select:none;transition:.12s;}',
             '#settings-hub .sh-item:hover{background:#232323;color:#fff;}',
             '#settings-hub .sh-item.active{background:rgba(29,185,84,.1);border-left-color:var(--accent,#1db954);color:var(--accent,#1db954);font-weight:600;}',
             '#settings-hub .sh-section{margin-top:14px;padding:8px 16px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#7a7a7a;border-top:1px solid #262626;}',
-            '#settings-hub .sh-pane{flex:1;overflow-y:auto;padding:20px 24px;min-width:0;scrollbar-gutter:stable;overscroll-behavior:contain;}',
+            // Единый фон панели — как страница приложения (--bg). Раньше панель была
+            // прозрачной на карточке, и каждый модал привносил свою подложку: вкладки
+            // выглядели по-разному («фон меняется зависимо от выбранной настройки»).
+            '#settings-hub .sh-pane{flex:1;overflow-y:auto;padding:20px 24px;min-width:0;background:var(--bg,#121212);scrollbar-gutter:stable;overscroll-behavior:contain;}',
             '#settings-hub .sh-pane .sh-tab-title{margin:0 0 14px;font-size:16px;color:var(--text,#eee);}',
             // Корни-модалки, перенесённые в панель: гасим оверлей-обвязку (позиция,
             // фон, z-index, display:none от их собственных #id-правил) — стили
