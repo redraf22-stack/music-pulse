@@ -1,4 +1,8 @@
-const { app } = require('electron');
+// app нужен только внутри Electron (путь userData). В plain-node (тесты, CI,
+// `npm run server`) require('electron') бросает, если бинарь не ставился
+// (ELECTRON_SKIP_BINARY_DOWNLOAD в CI) — тогда просто пропускаем шаг.
+let app = null;
+try { app = require('electron').app || null; } catch (e) { app = null; }
 if (app && !process.env.MUSICPULSE_DATA) {
     process.env.MUSICPULSE_DATA = app.getPath('userData');
 }
