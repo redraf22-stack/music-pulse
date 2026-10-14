@@ -15,7 +15,7 @@ function masterPctToGain(pct){
     pct = Math.max(-200, Math.min(200, pct));
     return 0.25 * Math.pow(2, pct / 200);
 }
-function makeSoftClipCurve(){const s=512,c=new Float32Array(s);for(let i=0;i<s;i++){const x=(i/(s-1))*2-1;c[i]=Math.tanh(x*2);}return c;}
+function makeSoftClipCurve(){const s=512,c=new Float32Array(s);for(let i=0;i<s;i++){const x=(i/(s-1))*2-1;c[i]=Math.tanh(x);}return c;}
 function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/(1024*1024)).toFixed(2)+' MB';}
 function formatTime(s){if(!s||isNaN(s))return'0:00';return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}
 function showToast(m,e){const el=document.getElementById('toast');if(!el)return;el.innerText=m;el.className=e?'toast show error':'toast show';setTimeout(function(){el.classList.remove('show');},2000);}

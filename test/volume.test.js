@@ -7,7 +7,7 @@ const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, '../src/js/helpers.js'), 'utf8');
 const stub = new Proxy({}, { get: () => () => undefined });
 const api = new Function('window', 'document', 'localStorage', 'navigator', 'console', 'setTimeout', 'clearTimeout',
-    src + '\nreturn { masterPctToGain, volumeToGain };')
+    src + '\nreturn { masterPctToGain, volumeToGain, makeSoftClipCurve };')
     (stub, stub, { getItem: () => null, setItem: () => {} }, { language: 'ru' }, console, setTimeout, clearTimeout);
 const g = api.masterPctToGain;
 
@@ -50,4 +50,20 @@ const chainWay = 1 * g(pct);
 const elemWay = Math.min(1, g(pct));
 assert.strictEqual(chainWay, elemWay, 'громкость не зависит от наличия WebAudio-цепочки');
 
-console.log('volume.test: ALL OK (5 блоков)');
+// 6. Soft-clip лимитер (makeSoftClipCurve) должен быть ПОЧТИ линейным на рабочих
+//    уровнях: старый tanh(x*2) удваивал тихие сигналы — 0% звучал как бывшие 100%
+const curve = api.makeSoftClipCurve();
+const N = curve.length;
+const xOf = i => (i / (N - 1)) * 2 - 1;
+assert.ok(Math.abs(curve[255]) < 0.003 && Math.abs(curve[256]) < 0.003, 'центр кривой ≈ 0');
+for (let i = 0; i < N; i++) {
+    const x = xOf(i);
+    assert.ok(Math.abs(curve[i]) <= 1, 'лимитер не выходит за [-1;1]');
+    if (Math.abs(x) <= 0.5) {
+        assert.ok(Math.abs(curve[i] - x) < 0.06, 'почти линейно на |x|<=0.5 (x=' + x.toFixed(2) + '), получено ' + curve[i].toFixed(3));
+    } else {
+        assert.ok(Math.abs(curve[i]) <= Math.abs(x) + 1e-6, 'только ограничивает, никогда не усиливает');
+    }
+}
+
+console.log('volume.test: ALL OK (6 блоков)');

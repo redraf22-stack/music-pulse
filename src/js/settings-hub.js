@@ -85,7 +85,7 @@ function shEnsure(){
             '#settings-hub .sh-item:hover{background:#232323;color:#fff;}',
             '#settings-hub .sh-item.active{background:rgba(29,185,84,.1);border-left-color:var(--accent,#1db954);color:var(--accent,#1db954);font-weight:600;}',
             '#settings-hub .sh-section{margin-top:14px;padding:8px 16px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#7a7a7a;border-top:1px solid #262626;}',
-            '#settings-hub .sh-pane{flex:1;overflow-y:auto;padding:20px 24px;min-width:0;}',
+            '#settings-hub .sh-pane{flex:1;overflow-y:auto;padding:20px 24px;min-width:0;scrollbar-gutter:stable;overscroll-behavior:contain;}',
             '#settings-hub .sh-pane .sh-tab-title{margin:0 0 14px;font-size:16px;color:var(--text,#eee);}',
             '#settings-hub .sh-pane .modal-box{background:none!important;border:none!important;padding:0!important;width:auto!important;box-shadow:none!important;max-height:none!important;}',
             '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-box>.modal-close{display:none!important;}',
@@ -131,7 +131,7 @@ function shRestoreAll(){shMoved.forEach((info,node)=>{shRestore(node);});shMoved
 function shShow(id){
     const tabs=shTabs();
     const tab=tabs.find(t=>t.id===id);
-    if(!tab)return;
+    if(!tab||tab.action)return; // action-вкладки не должны управлять панелью
     // убрать предыдущую вкладку
     if(shCurrentTab){
         try{if(shCurrentTab.hide)shCurrentTab.hide();}catch(e){}
@@ -145,7 +145,6 @@ function shShow(id){
     title.className='sh-tab-title';
     title.textContent=tab.label;
     pane.appendChild(title);
-    if(tab.action){tab.action();return;} // действие поверх хаба, вкладку не подсвечиваем
     const nodes=tab.nodes();
     nodes.forEach(n=>{shMove(n);pane.appendChild(n);});
     shCurrentTab=tab;
@@ -172,8 +171,10 @@ function openSettingsHub(tab){
         it.className='sh-item';
         it.dataset.tab=t.id||('act-'+Math.random());
         it.innerHTML='<span>'+(t.ico||'')+'</span><span>'+t.label+'</span>';
-        if(t.id)it.onclick=()=>shShow(t.id);
-        else it.onclick=()=>{try{t.action();}catch(e){}};
+        // action-вкладки (плейлисты/моя музыка) открывают свою модалку ПОВЕРХ хаба
+        // и не трогают текущую вкладку — иначе панель опустеет (баг «ломаются настройки»)
+        if(t.action)it.onclick=()=>{try{t.action();}catch(e){}};
+        else it.onclick=()=>shShow(t.id);
         nav.appendChild(it);
     });
     document.getElementById('settings-hub').style.display='flex';
