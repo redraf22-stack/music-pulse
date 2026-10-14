@@ -6,7 +6,7 @@ socket.on('user-left-voice',d=>{if(d&&d.id){voiceUsers.delete(d.id);if(lastUsers
 function backToStart(){try{if(window.electronAPI&&window.electronAPI.mediaKeysSet)window.electronAPI.mediaKeysSet(false);}catch(e){}try{if(window.electronAPI&&window.electronAPI.closeChatWindow)window.electronAPI.closeChatWindow();}catch(e){}if(window.electronAPI&&window.electronAPI.goStart){window.electronAPI.goStart(currentLang);}else{window.location.replace('/');}}
 // Системные медиа-клавиши (Play/Pause, Next, Prev) — приходят из главного процесса.
 // Внутри togglePlay/playNextTrack/playPrevTrack уже стоит проверка admin/mod.
-if(window.electronAPI&&window.electronAPI.onMediaKey)window.electronAPI.onMediaKey(a=>{if(a==='playpause')togglePlay();else if(a==='next')playNextTrack();else if(a==='prev')playPrevTrack();});
+if(window.electronAPI&&window.electronAPI.onMediaKey)window.electronAPI.onMediaKey(a=>{console.log('[pause] VK-медиаклавиша → '+a);if(a==='playpause')togglePlay();else if(a==='next')playNextTrack();else if(a==='prev')playPrevTrack();});
 const bootMode=urlParams.get('mode');
 const bootNick=(urlParams.get('nick')||'').trim();
 const bootCode=(urlParams.get('code')||'').trim().toUpperCase();
@@ -75,7 +75,7 @@ isReady=true;restorePlayerBar();
 }
 else{document.getElementById('admin-controls').style.display='none';if(window.electronAPI){isReady=true;restorePlayerBar();}else{showReadyButton();}startCooldownTimer();}
 updateVoiceEntryButton();updateManageBtnVisibility();updateRegenBtnVisibility();updateRandomButtonVisibility();
-const sv=localStorage.getItem('mp_master_volume');if(sv!==null&&typeof audio!=='undefined'){audio.volume=parseFloat(sv);}
+if(typeof audio!=='undefined'){setMasterVolume(masterVolumePct);}
 socket.emit('get-active-streams');
 socket.emit('get-playlists');
 if(window.electronAPI&&typeof publishPersonalShare==='function'){const _c=window._shareConfirmed&&window._shareConfirmed[currentRoomCode];if(_c&&_c.length)setTimeout(()=>publishPersonalShare(_c),1500);}
@@ -323,8 +323,12 @@ function mkPlViewRow(t,pre){
 function closePlaylistView(){document.getElementById('playlist-view-modal').classList.remove('open');}
 // ===== НАСТРОЙКИ УСТРОЙСТВ В КОМНАТЕ =====
 async function openRoomDeviceSettings(){
+if(typeof openSettingsHub==='function'){openSettingsHub('devices');return;}
 const m=document.getElementById('room-device-modal');if(!m)return;
 m.style.display='flex';
+await populateRoomDeviceSelects();
+}
+async function populateRoomDeviceSelects(){
 await loadDeviceSettings();
 try{
 const ts=await navigator.mediaDevices.getUserMedia({audio:true,video:true}).catch(()=>navigator.mediaDevices.getUserMedia({audio:true}));
@@ -346,7 +350,7 @@ resolveSelectValue(mic,selectedMicId,'audioinput');resolveSelectValue(sp,selecte
 }catch(e){console.error('[room-devices]',e);}
 }
 
-function closeRoomDeviceSettings(){const m=document.getElementById('room-device-modal');if(m)m.style.display='none';}
+function closeRoomDeviceSettings(){if(typeof shInterceptClose==='function'&&shInterceptClose())return;const m=document.getElementById('room-device-modal');if(m)m.style.display='none';}
 
 async function saveRoomDeviceSettings(){
 const mic=document.getElementById('room-mic-select').value;

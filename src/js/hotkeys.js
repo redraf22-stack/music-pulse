@@ -61,7 +61,7 @@ showToast(translate('join_voice_first'),true);return false;
 function _hkMicGate(){if(typeof applyMicGate==='function'){try{applyMicGate();}catch(e){}}}
 function _hkVoiceUi(){if(typeof updateVoiceControlsInPlayer==='function'){try{updateVoiceControlsInPlayer();}catch(e){}}}
 // Медиадействия: вне комнаты (нет плеера) — тихая нет-операция
-function _hkMediaAction(a){
+function _hkMediaAction(a){console.log('[pause] хоткей → '+a);
 if(a==='playpause'&&typeof togglePlay==='function')togglePlay();
 else if(a==='next'&&typeof playNextTrack==='function')playNextTrack();
 else if(a==='prev'&&typeof playPrevTrack==='function')playPrevTrack();
@@ -263,6 +263,7 @@ function closeHotkeysModal(){
 const m=document.getElementById('hotkeys-modal');
 if(m)m.style.display='none';
 if(_hkCapturing)_hkEndCapture(); // иначе глобальный опрос останется на паузе
+if(typeof shInterceptClose==='function'&&shInterceptClose())return; // «Готово/✕» из вкладки хаба — закрыть хаб
 }
 
 // ===== Глобальный режим (Electron: главный процесс опрашивает клавиши через koffi/Win32) =====

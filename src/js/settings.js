@@ -80,27 +80,7 @@ if(label){const o=opts.find(x=>x.textContent===label);if(o){sel.value=o.value;re
 sel.value='';
 }
 
-function openSettings(){
-    const m=document.getElementById('settings-modal');
-    if(!m)return;
-    m.classList.add('open');
-    // Не открываем устройства автоматически — только при клике
-}
-function closeSettings(){const m=document.getElementById('settings-modal');if(m)m.classList.remove('open');}
-
-function openDevicesModal(){
-    const m=document.getElementById('devices-modal');
-    if(!m)return;
-    m.classList.add('open');
-    enumerateDevices();
-}
-function closeDevicesModal(){const m=document.getElementById('devices-modal');if(m)m.classList.remove('open');}
-
-function openMusicModal(){
-    const m=document.getElementById('music-modal');
-    if(!m)return;
-    m.classList.add('open');
-    // Загружаем путь к папке
+function loadMusicDirSetting(){
     if(window.electronAPI&&window.electronAPI.getMusicDir){
         window.electronAPI.getMusicDir().then(r=>{
             const inp=document.getElementById('music-dir-input');
@@ -108,7 +88,33 @@ function openMusicModal(){
         }).catch(()=>{});
     }
 }
-function closeMusicModal(){const m=document.getElementById('music-modal');if(m)m.classList.remove('open');}
+function openSettings(){
+    if(typeof openSettingsHub==='function')return openSettingsHub();
+    const m=document.getElementById('settings-modal');
+    if(!m)return;
+    m.classList.add('open');
+    // Не открываем устройства автоматически — только при клике
+}
+function closeSettings(){if(typeof shInterceptClose==='function'&&shInterceptClose())return;const m=document.getElementById('settings-modal');if(m)m.classList.remove('open');}
+
+function openDevicesModal(){
+    if(typeof openSettingsHub==='function')return openSettingsHub('devices');
+    const m=document.getElementById('devices-modal');
+    if(!m)return;
+    m.classList.add('open');
+    enumerateDevices();
+}
+function closeDevicesModal(){if(typeof shInterceptClose==='function'&&shInterceptClose())return;const m=document.getElementById('devices-modal');if(m)m.classList.remove('open');}
+
+function openMusicModal(){
+    if(typeof openSettingsHub==='function')return openSettingsHub('music');
+    const m=document.getElementById('music-modal');
+    if(!m)return;
+    m.classList.add('open');
+    // Загружаем путь к папке
+    loadMusicDirSetting();
+}
+function closeMusicModal(){if(typeof shInterceptClose==='function'&&shInterceptClose())return;const m=document.getElementById('music-modal');if(m)m.classList.remove('open');}
 
 (function(){
     ['settings-modal','devices-modal','music-modal'].forEach(id=>{

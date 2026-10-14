@@ -246,15 +246,11 @@
 <div class="modal-box">
 <button class="modal-close" onclick="closeRoomDeviceSettings()">✕</button>
 <h2>⚙️ Настройки устройств</h2>
-<div class="modal-field"><label>Язык / Language</label><div class="lang-switch"><button class="lang-btn" id="room-lang-ru" onclick="setLanguage('ru')">Русский</button><button class="lang-btn" id="room-lang-en" onclick="setLanguage('en')">English</button></div></div>
+<div class="modal-field" id="room-lang-field"><label>Язык / Language</label><div class="lang-switch"><button class="lang-btn" id="room-lang-ru" onclick="setLanguage('ru')">Русский</button><button class="lang-btn" id="room-lang-en" onclick="setLanguage('en')">English</button></div></div>
 <div class="modal-field"><label>Микрофон (ввод)</label><select class="modal-select" id="room-mic-select"><option value="">По умолчанию</option></select></div>
 <div class="modal-field"><label>Динамики (вывод)</label><select class="modal-select" id="room-speaker-select"><option value="">По умолчанию</option></select></div>
 <div class="modal-field"><label>📷 Камера (видео)</label><select class="modal-select" id="room-camera-select"><option value="">По умолчанию</option></select></div>
-<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
-<button class="secondary" style="width:100%;" onclick="closeRoomDeviceSettings();openHotkeysModal();">⌨️ Сочетания клавиш</button>
-<button class="secondary" style="width:100%;" onclick="closeRoomDeviceSettings();openEqModal();">🎛 Эквалайзер</button>
-<button class="secondary" style="width:100%;" onclick="closeRoomDeviceSettings();openPersonalPlaylistsManager();">📚 Личные плейлисты</button>
-<div style="display:flex;justify-content:flex-end;gap:8px;">
+<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">
 <button class="secondary" onclick="closeRoomDeviceSettings()">Отмена</button>
 <button class="primary" onclick="saveRoomDeviceSettings()">✓ Применить</button>
 </div>
@@ -367,6 +363,7 @@
 <script src="js/core.js"></script>
 <script src="js/hotkeys.js"></script>
 <script src="js/eq.js"></script>
+<script src="js/settings-hub.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/player.js"></script>
 <script src="js/chat.js"></script>

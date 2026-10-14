@@ -64,6 +64,13 @@ function createWindow() {
             mainWindow.webContents.toggleDevTools();
         }
     });
+    // Диагностика паузы: логи рендерера с префиксом [pause] дублируются в терминал npm
+    mainWindow.webContents.on('console-message', (event, ...args) => {
+        try {
+            const m = (event && typeof event.message === 'string') ? event.message : args.find(a => typeof a === 'string');
+            if (typeof m === 'string' && m.indexOf('[pause]') === 0) console.log(m);
+        } catch (err) {}
+    });
     // ✅ Разрешаем трансляцию экрана в Electron
     mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
         callback(true);

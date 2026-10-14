@@ -6,6 +6,15 @@ function volumeToGain(v){
     if (v <= 1) return v;
     return Math.pow(v, 1.5);
 }
+// Мастер-громкость: шкала -200%..+200%, 0% = обычная громкость (gain 0.25).
+// +200% = 0.5 (то, что раньше значилось 100%), логарифмическая, ×2 на каждые 200%.
+// Один и тот же результат в обоих путях: WebAudio-gain (цепочка есть) и audio.volume (нет).
+function masterPctToGain(pct){
+    pct = parseFloat(pct);
+    if (isNaN(pct)) pct = 0;
+    pct = Math.max(-200, Math.min(200, pct));
+    return 0.25 * Math.pow(2, pct / 200);
+}
 function makeSoftClipCurve(){const s=512,c=new Float32Array(s);for(let i=0;i<s;i++){const x=(i/(s-1))*2-1;c[i]=Math.tanh(x*2);}return c;}
 function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/(1024*1024)).toFixed(2)+' MB';}
 function formatTime(s){if(!s||isNaN(s))return'0:00';return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}
