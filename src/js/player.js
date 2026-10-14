@@ -31,6 +31,9 @@ let userPaused=false;
 let _trackLoadAbort=null;
 let syncPlaying=false,syncStartedAt=null,syncCurrentTime=0;
 let lastQueue=[];let _prefetchedUrl='';
+// [pause] диагностика: каждый стоп/старт аудио (relay в main.js → терминал npm)
+audio.addEventListener('play',()=>console.log('[pause] audio→PLAY t='+(+audio.currentTime).toFixed(2)));
+audio.addEventListener('pause',()=>console.log('[pause] audio→PAUSE t='+(+audio.currentTime).toFixed(2)));
 function nextTrackPreviewUrl(t){if(!t)return '';let u=t.preview||t.trackUrl||'';if(!u)return '';if(/^https?:/i.test(u))u='/proxy?url='+encodeURIComponent(u);return window.location.origin+u;}
 function prefetchNext(){try{
 if(!lastQueue||!lastQueue.length)return;
@@ -50,7 +53,7 @@ searchInputEl.addEventListener('input',function(){
 if(!this.value.trim()){searchResults=[];searchCurPage=1;renderSearchResults();const sp=document.getElementById('search-panel');if(sp)sp.classList.remove('open');}
 });
 function showReadyButton(){document.getElementById('player-bar').innerHTML=`<div style="width:100%;text-align:center;padding:10px;"><p style="color:var(--sub);margin-bottom:12px;font-size:14px;">${translate('autoplay_blocked')}</p><button class="primary" id="unlock-audio-btn" style="max-width:350px;margin:0 auto;">${escapeHtml(translate('click_to_enable'))}</button></div>`;document.getElementById('unlock-audio-btn').addEventListener('click',enableAudio);}
-function enableAudio(){const c=getGlobalAudioContext();if(c&&c.state==='suspended')c.resume();audio.src='data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';audio.play().then(()=>{isReady=true;audio.pause();audio.currentTime=0;applySpeakerToDevice();initMusicGainNode();restorePlayerBar();}).catch(()=>showAlert('⚠️','Ошибка',translate('no_browser_support')));}function initMusicGainNode(){if(musicGainNode)return true;try{const c=getGlobalAudioContext();if(!c)return false;if(c.state==='suspended')c.resume();const s=c.createMediaElementSource(audio);musicGainNode=c.createGain();musicGainNode.gain.value=volumeToGain(masterVolume);musicShaperNode=c.createWaveShaper();musicShaperNode.curve=makeSoftClipCurve();musicShaperNode.oversample='2x';s.connect(musicGainNode);musicGainNode.connect(musicShaperNode);musicShaperNode.connect(c.destination);musicAudioCtx=c;return true;}catch(e){return false;}}
+function enableAudio(){const c=getGlobalAudioContext();if(c&&c.state==='suspended')c.resume();audio.src='data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';audio.play().then(()=>{isReady=true;audio.pause();audio.currentTime=0;applySpeakerToDevice();initMusicGainNode();restorePlayerBar();}).catch(()=>showAlert('⚠️','Ошибка',translate('no_browser_support')));}function initMusicGainNode(){if(musicGainNode)return true;try{const c=getGlobalAudioContext();if(!c)return false;if(c.state==='suspended')c.resume();const s=c.createMediaElementSource(audio);musicGainNode=c.createGain();musicGainNode.gain.value=volumeToGain(masterVolume);musicShaperNode=c.createWaveShaper();musicShaperNode.curve=makeSoftClipCurve();musicShaperNode.oversample='2x';s.connect(musicGainNode);if(!(typeof eqBuild==='function'&&eqBuild(c,musicGainNode,musicShaperNode)))musicGainNode.connect(musicShaperNode);musicShaperNode.connect(c.destination);musicAudioCtx=c;if(!c._mpResumeHook){c._mpResumeHook=1;c.addEventListener('statechange',()=>{if(c.state==='suspended')c.resume().catch(()=>{});});}return true;}catch(e){return false;}}
 function setMasterVolume(v){masterVolume=parseFloat(v);localStorage.setItem('mp_master_volume',String(masterVolume));if(musicGainNode&&musicAudioCtx)musicGainNode.gain.setTargetAtTime(volumeToGain(v),musicAudioCtx.currentTime,0.015);else audio.volume=Math.min(1,volumeToGain(v));}
 function restorePlayerBar(){
 const bar=document.getElementById('player-bar');const cc=myRole==='admin'||isMod;const sc=cc?'progress-bar can-seek':'progress-bar';const ra=isRepeat?'active':'';const pv=Math.round(masterVolume*200);
@@ -70,12 +73,13 @@ function onEnded(){if(isRepeat){audio.currentTime=0;audio.play().catch(()=>{setT
 function toggleRepeat(){if(myRole!=='admin'&&!isMod)return;isRepeat=!isRepeat;const b=document.getElementById('repeat-btn');if(b)b.classList.toggle('active',isRepeat);socket.emit('update-state',{isRepeat:isRepeat});}
 function playNextTrack(){if(myRole!=='admin'&&!isMod)return;isRepeat=false;const b=document.getElementById('repeat-btn');if(b)b.classList.remove('active');socket.emit('update-state',{isRepeat:false});socket.emit('play-next',{keepPaused:userPaused});}
 function playPrevTrack(){if(myRole!=='admin'&&!isMod)return;socket.emit('play-prev',{keepPaused:userPaused});}
-function togglePlay(){if(myRole!=='admin'&&!isMod)return;userPaused=!userPaused;const want=!userPaused;syncPlaying=want;socket.emit('update-state',{playing:want,currentTime:audio.currentTime,startedAt:want?Date.now()+serverTimeOffset:null});const p=document.getElementById('play-btn');if(p)p.innerHTML=want?SVG_PAUSE:SVG_PLAY;}
+function togglePlay(){if(myRole!=='admin'&&!isMod){console.log('[pause] togglePlay ИГНОР: role='+myRole+' mod='+isMod);return;}userPaused=!userPaused;const want=!userPaused;syncPlaying=want;console.log('[pause] toggle: userPaused='+userPaused+' want='+want+' audio.t='+(+audio.currentTime).toFixed(2)+' audio.paused='+audio.paused+' btn='+(!!document.getElementById('play-btn')));socket.emit('update-state',{playing:want,currentTime:audio.currentTime,startedAt:want?Date.now()+serverTimeOffset:null});const p=document.getElementById('play-btn');if(p)p.innerHTML=want?SVG_PAUSE:SVG_PLAY;}
 function updateProgress(){if(isSeeking)return;const p=document.getElementById('progress'),c=document.getElementById('time-current');if(!p||!audio.duration)return;const pc=(audio.currentTime/audio.duration)*100;p.value=pc;if(c)c.textContent=formatTime(audio.currentTime);p.style.background=`linear-gradient(to right,var(--accent) ${pc}%,#4d4d4d ${pc}%)`;}
 function updateProgressRO(){const p=document.getElementById('progress'),c=document.getElementById('time-current');if(!p||!audio.duration)return;const pc=(audio.currentTime/audio.duration)*100;p.value=pc;if(c)c.textContent=formatTime(audio.currentTime);p.style.background=`linear-gradient(to right,var(--accent) ${pc}%,#4d4d4d ${pc}%)`;}
 function seekAudio(pc){if(!audio.duration||(myRole!=='admin'&&!isMod))return;audio.currentTime=(pc/100)*audio.duration;socket.emit('seek',audio.currentTime);}
 socket.on('sync',state=>{
     syncPlaying=!!state.playing;if(state.startedAt!==undefined)syncStartedAt=state.startedAt;if(state.currentTime!==undefined)syncCurrentTime=state.currentTime;
+console.log('[pause] sync: playing='+!!state.playing+' hb='+!!state.heartbeat+' ct='+(state.currentTime!==undefined?+(+state.currentTime).toFixed(2):'-')+' startedAt='+(state.startedAt||'-')+' | userPaused='+userPaused+' audio.paused='+audio.paused+' t='+(+audio.currentTime).toFixed(2));
 const ti=document.getElementById('p-title'),a=document.getElementById('p-artist'),p=document.getElementById('play-btn'),c=document.getElementById('p-cover');
 if(ti&&state.trackName!==undefined)ti.textContent=state.trackName||translate('waiting');
 if(a&&state.trackArtist!==undefined)a.textContent=state.trackArtist||'—';
@@ -133,7 +137,7 @@ const expected=(state.playing&&state.startedAt)?(Date.now()+serverTimeOffset-sta
 if(expected>=0&&(!audio.duration||expected<=audio.duration)){
 const diff=Math.abs(audio.currentTime-expected);
 // Мёртвая зона 1.5с: периодический sync (раз в 5с) — это heartbeat, а не сигнал к догону. Малый дрейф за 5с не слышен и НЕ трогается вообще (ни позиция, ни скорость) — иначе получаем заикание/плавание темпа на каждом тике. Рывок позицией только при реальном рассинхроне >=1.5с (seek обрабатывается отдельной веткой isSeek и сюда не попадает).
-if(diff>=1.5&&audio.readyState>=3){
+if(diff>=1.5&&audio.readyState>=3){console.log('[pause] ДРЕЙФ '+diff.toFixed(1)+'с: '+(+audio.currentTime).toFixed(2)+' -> '+expected.toFixed(2)+' playing='+state.playing+' userPaused='+userPaused);
 audio.currentTime=expected;
 }
 }
