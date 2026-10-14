@@ -6,14 +6,19 @@ function volumeToGain(v){
     if (v <= 1) return v;
     return Math.pow(v, 1.5);
 }
-// Мастер-громкость: шкала -200%..+200%, 0% = обычная громкость (gain 0.25).
-// +200% = 0.5 (то, что раньше значилось 100%), логарифмическая, ×2 на каждые 200%.
+// Мастер-громкость: шкала -200%..+100% (просьба пользователя 2.0.21):
+//   -200% = полная тишина (gain 0), 0% = обычная громкость (gain 0.25),
+//   +100% = усиление ×3 от обычной (gain 0.75).
+// Вверх — лог-кривая 3^(pct/100): диапазон 0..100% занимает треть хода ползунка
+// и идёт мягко (тонкая настройка усиления). Вниз — лог-кривая с нулём на краю:
+// у 0% плотная (плавное затихание), у -200% схлопывается в настоящую тишину.
 // Один и тот же результат в обоих путях: WebAudio-gain (цепочка есть) и audio.volume (нет).
 function masterPctToGain(pct){
     pct = parseFloat(pct);
     if (isNaN(pct)) pct = 0;
-    pct = Math.max(-200, Math.min(200, pct));
-    return 0.25 * Math.pow(2, pct / 200);
+    pct = Math.max(-200, Math.min(100, pct));
+    if (pct >= 0) return 0.25 * Math.pow(3, pct / 100);
+    return 0.25 * (2 * Math.pow(2, pct / 200) - 1);
 }
 function makeSoftClipCurve(){const s=512,c=new Float32Array(s);for(let i=0;i<s;i++){const x=(i/(s-1))*2-1;c[i]=Math.tanh(x);}return c;}
 function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/(1024*1024)).toFixed(2)+' MB';}

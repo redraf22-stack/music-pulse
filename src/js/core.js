@@ -16,17 +16,30 @@ let searchResults=[],currentInbox=[],isSeeking=false;
 let localPage=1,localPages=0,isLocalSearch=false,localFilter='';
 let isRandomMode=false,isLanOpen=false;
 let musicGainNode=null,musicShaperNode=null,musicAudioCtx=null;
-// Мастер-громкость: новая шкала mp_master_volume_pct (-200..+200, 0% = обычная).
-// Однократная миграция из старого ключа mp_master_volume (0..1): громкость сохраняется,
-// но старые «100%» теперь значат «+200%» — как и просил пользователь.
+// Мастер-громкость: шкала mp_master_volume_pct (-200..+100, 0% = обычная, +100% = ×3).
+// mp_master_volume_scale='2' — флаг новой шкалы (2.0.21). Без него значение ещё лежит
+// в старой шкале (-200..+200, ×2 на 200%) и переводится без изменения ГРОМКОСТИ:
+// старый gain берётся по старой формуле и ищется pct новой шкалы с тем же gain.
+// Ещё старее mp_master_volume (0..1 — это просто gain) → тот же путь.
 let masterVolumePct=(function(){
-    let s=localStorage.getItem('mp_master_volume_pct');
-    if(s!==null){const n=parseInt(s,10);if(!isNaN(n))return Math.max(-200,Math.min(200,n));}
-    let p=0;
-    const o=parseFloat(localStorage.getItem('mp_master_volume'));
-    if(!isNaN(o)&&o>0)p=Math.round(200*Math.log2(o/0.25));
-    p=Math.max(-200,Math.min(200,p));
-    try{localStorage.setItem('mp_master_volume_pct',String(p));}catch(e){}
+    function gainToNewPct(g){
+        if(!(g>0))return -200;
+        let p;
+        if(g>=0.25)p=100*Math.log(g/0.25)/Math.log(3);
+        else p=200*Math.log2((g/0.25+1)/2);
+        return Math.max(-200,Math.min(100,Math.round(p)));
+    }
+    const s=localStorage.getItem('mp_master_volume_pct');
+    const legacyScale=localStorage.getItem('mp_master_volume_scale');
+    let p=null;
+    if(s!==null&&!isNaN(parseInt(s,10))){
+        if(legacyScale==='2')p=Math.max(-200,Math.min(100,parseInt(s,10)));
+        else p=gainToNewPct(0.25*Math.pow(2,Math.max(-200,Math.min(200,parseInt(s,10)))/200)); // старая шкала → новая, громкость та же
+    }else{
+        const o=parseFloat(localStorage.getItem('mp_master_volume'));
+        p=gainToNewPct((!isNaN(o)&&o>0)?o:0.25); // древний ключ (0..1 = gain)
+    }
+    try{localStorage.setItem('mp_master_volume_pct',String(p));localStorage.setItem('mp_master_volume_scale','2');}catch(e){}
     return p;
 })();
 audio.volume=Math.min(1,masterPctToGain(masterVolumePct));

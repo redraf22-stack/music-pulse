@@ -3,7 +3,8 @@
 // возвращает их на место при закрытии — вся старая логика (id, onclick, сохранение)
 // продолжает работать без правок. Роли: секция «Настройки комнаты» — только admin/mod.
 // Секции: Общие / Устройства / Музыка (старт) / Горячие клавиши / Эквалайзер /
-// Личные плейлисты / --- Настройки комнаты --- Технические (кулдауны и т.п.).
+// Личные плейлисты / --- Настройки комнаты --- Эквалайзер комнаты и Технические
+// (кулдауны и т.п.) — только admin/mod.
 let shOpen=false,shLastTab=null,shMoved=new Map(),shCurrentTab=null;
 
 function shIsAdmin(){try{return typeof myRole!=='undefined'&&(myRole==='admin'||(typeof isMod!=='undefined'&&isMod));}catch(e){return false;}}
@@ -12,28 +13,33 @@ function shInRoom(){try{return typeof currentRoomCode!=='undefined'&&!!currentRo
 function shInterceptClose(){if(!shOpen)return false;closeSettingsHub();return true;}
 
 function shTabs(){
+    // Перемещаем КОРНИ модалок (а не внутренние боксы): их CSS висит на #id предках
+    // (#room-device-modal .modal-select, #eq-modal .eq-* и т.д.) — при выносе только
+    // бокса все эти правила переставали матчиться и контент «голел». Корень увозим
+    // целиком — предок сохраняется, стили продолжают работать; нейтрализацию
+    // оверлея (position/display/z-index) делает CSS хаба в shEnsure().
     const isIndex=!!document.getElementById('room-device-modal');
     const t=[];
     if(isIndex){
         t.push({id:'general',ico:'🌐',label:translate('sh_general'),
             nodes:()=>[document.getElementById('room-lang-field')].filter(Boolean)});
         t.push({id:'devices',ico:'🎙',label:translate('sh_devices'),
-            nodes:()=>[document.querySelector('#room-device-modal .modal-box')].filter(Boolean),
+            nodes:()=>[document.getElementById('room-device-modal')].filter(Boolean),
             show:()=>{try{if(typeof populateRoomDeviceSelects==='function')populateRoomDeviceSelects();}catch(e){}}});
     }else{
         t.push({id:'general',ico:'🌐',label:translate('sh_general'),
-            nodes:()=>[document.querySelector('#settings-modal .modal-box')].filter(Boolean)});
+            nodes:()=>[document.getElementById('settings-modal')].filter(Boolean)});
         t.push({id:'devices',ico:'🎙',label:translate('sh_devices'),
-            nodes:()=>[document.querySelector('#devices-modal .modal-box')].filter(Boolean),
+            nodes:()=>[document.getElementById('devices-modal')].filter(Boolean),
             show:()=>{try{if(typeof enumerateDevices==='function')enumerateDevices();}catch(e){}}});
         t.push({id:'music',ico:'🎵',label:translate('sh_music'),
-            nodes:()=>[document.querySelector('#music-modal .modal-box')].filter(Boolean),
+            nodes:()=>[document.getElementById('music-modal')].filter(Boolean),
             show:()=>{try{if(typeof loadMusicDirSetting==='function')loadMusicDirSetting();}catch(e){}}});
     }
     t.push({id:'hotkeys',ico:'⌨️',label:translate('sh_hotkeys'),
-        nodes:()=>{try{ensureHotkeysModal();}catch(e){}return [document.querySelector('#hotkeys-modal .hk-box')].filter(Boolean);}});
+        nodes:()=>{try{ensureHotkeysModal();}catch(e){}return [document.getElementById('hotkeys-modal')].filter(Boolean);}});
     t.push({id:'eq',ico:'🎛',label:translate('sh_eq'),
-        nodes:()=>{try{ensureEqModal();}catch(e){}return [document.querySelector('#eq-modal .eq-box')].filter(Boolean);}});
+        nodes:()=>{try{ensureEqModal();}catch(e){}return [document.getElementById('eq-modal')].filter(Boolean);}});
     t.push({id:'playlists',ico:'📚',label:translate('sh_playlists'),action:()=>{
         try{openPersonalPlaylistsManager();}catch(e){}}});
     if(typeof openMyMusic==='function') // «Моя музыка» живёт в player.js — есть только в комнате
@@ -41,6 +47,11 @@ function shTabs(){
             try{openMyMusic();}catch(e){}}});
     if(shInRoom()&&shIsAdmin()){
         t.push({section:translate('sh_room_section')});
+        // Отдельный вход в КОМНАТНЫЙ эквалайзер (только admin/mod): та же панель,
+        // но с принудительным источником «комната» — как и просил пользователь.
+        t.push({id:'eqroom',ico:'🎛',label:translate('sh_eq_room'),
+            nodes:()=>{try{ensureEqModal();}catch(e){}return [document.getElementById('eq-modal')].filter(Boolean);},
+            show:()=>{try{if(typeof eqActiveSource==='function'&&eqActiveSource()!=='room'&&typeof eqSetSource==='function')eqSetSource('room');}catch(e){}}});
         t.push({id:'room',ico:'⚙️',label:translate('sh_room_tech'),
             nodes:()=>{const p=document.getElementById('tech-settings-panel');return p?[p]:[];},
             show:()=>shTechPanelFix(true),hide:()=>shTechPanelFix(false)});
@@ -87,8 +98,24 @@ function shEnsure(){
             '#settings-hub .sh-section{margin-top:14px;padding:8px 16px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#7a7a7a;border-top:1px solid #262626;}',
             '#settings-hub .sh-pane{flex:1;overflow-y:auto;padding:20px 24px;min-width:0;scrollbar-gutter:stable;overscroll-behavior:contain;}',
             '#settings-hub .sh-pane .sh-tab-title{margin:0 0 14px;font-size:16px;color:var(--text,#eee);}',
+            // Корни-модалки, перенесённые в панель: гасим оверлей-обвязку (позиция,
+            // фон, z-index, display:none от их собственных #id-правил) — стили
+            // СОДЕРЖИМОГО при этом остаются от предков с теми же #id.
+            '#settings-hub .sh-pane>#settings-modal,#settings-hub .sh-pane>#devices-modal,#settings-hub .sh-pane>#music-modal,#settings-hub .sh-pane>#room-device-modal,#settings-hub .sh-pane>#hotkeys-modal,#settings-hub .sh-pane>#eq-modal{position:static!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;inset:auto!important;background:none!important;z-index:auto!important;display:block!important;align-items:unset!important;justify-content:unset!important;max-width:none!important;max-height:none!important;overflow:visible!important;}',
             '#settings-hub .sh-pane .modal-box{background:none!important;border:none!important;padding:0!important;width:auto!important;box-shadow:none!important;max-height:none!important;}',
-            '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-box>.modal-close{display:none!important;}',
+            '#settings-hub .sh-pane .hk-box,#settings-hub .sh-pane .eq-box{position:static!important;background:none!important;border:none!important;box-shadow:none!important;width:auto!important;max-width:none!important;padding:0!important;max-height:none!important;overflow:visible!important;}',
+            // Штатный хром модалок (заголовок/✕) внутри панели прячем CSS-ом, а не
+            // инлайном: eqSetSource/openEqModal перерисовывают innerHTML — новые
+            // элементы инлайн-скрытие уже не унаследуют, а CSS-правило действует.
+            '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-close,#settings-hub .sh-pane .hk-title,#settings-hub .sh-pane .hk-close,#settings-hub .sh-pane .eq-title,#settings-hub .sh-pane .eq-close{display:none!important;}',
+            // #room-lang-field (вкладка «Общие» на index) выносится из #room-device-modal,
+            // поэтому #id-область стилей предка не действует — дублируем только для него
+            // (id стоит на самом поле, селекты работают из любого положения).
+            '#room-lang-field.modal-field{margin-bottom:12px;}',
+            '#room-lang-field label{display:block;font-size:12px;color:#9a9a9a;margin-bottom:5px;}',
+            '#room-lang-field .lang-switch{display:flex;gap:8px;}',
+            '#room-lang-field .lang-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--sub);font-weight:bold;font-size:14px;cursor:pointer;text-align:center;}',
+            '#room-lang-field .lang-btn.active{background:var(--accent);color:black;border-color:var(--accent);}',
             '#settings-hub .sh-pane .tech-panel{position:static!important;display:block!important;width:100%!important;max-width:430px;}',
             '#personal-playlists-manager-modal{z-index:3600!important;}',
             '#my-music-modal{z-index:3600!important;}',
@@ -135,9 +162,12 @@ function shShow(id){
     // убрать предыдущую вкладку
     if(shCurrentTab){
         try{if(shCurrentTab.hide)shCurrentTab.hide();}catch(e){}
-        shCurrentTab.nodes().forEach(shRestore);
         shCurrentTab=null;
     }
+    // Страховка: вернуть ВСЁ, что когда-либо переехало (не только nodes() предыдущей
+    // вкладки). Иначе pane.innerHTML='' ниже способен уничтожить модалку вместе с
+    // содержимым — и при следующем переключении справа оказывается пусто.
+    shRestoreAll();
     document.querySelectorAll('#sh-nav .sh-item').forEach(el=>el.classList.toggle('active',el.dataset.tab===id));
     const pane=document.getElementById('sh-pane');
     pane.innerHTML='';
@@ -147,6 +177,7 @@ function shShow(id){
     pane.appendChild(title);
     const nodes=tab.nodes();
     nodes.forEach(n=>{shMove(n);pane.appendChild(n);});
+    if(!nodes.length&&typeof console!=='undefined')console.warn('[settings-hub] вкладка',id,'не нашла свои элементы — панель будет пустой');
     shCurrentTab=tab;
     try{if(tab.show)tab.show();}catch(e){}
     shLastTab=id;
