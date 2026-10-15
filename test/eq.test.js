@@ -74,4 +74,36 @@ const fresh = new Function('localStorage', 'document', 'musicAudioCtx', 'initMus
 assert.strictEqual(fresh.on, false, 'битый JSON → дефолты');
 assert.ok(fresh.g.every(v => v === 0), 'битый JSON → нули');
 
-console.log('eq.test: ALL OK (7 блоков)');
+// 8. Рендер: переключатель источника и подсказки
+// Был баг: в рендере стоял eqEditMode()==='room', который true и у обычного слушателя
+// с источником «Комнатный» (по умолчанию) — из-за чего переключатель исчезал из
+// обычной вкладки и показывалась комнатная подсказка.
+const api2 = new Function('localStorage', 'document', 'myRole', 'currentRoomCode', 'isMod', 'socket', 'translate',
+    src + '\nreturn { eqRenderHtml, eqEditSet, eqActiveSource };')
+    (localStorage, document, 'admin', '12345', false, null, k => k);
+
+assert.strictEqual(api2.eqActiveSource(), 'room', 'источник по умолчанию — комнатный');
+let html = api2.eqRenderHtml();
+assert.ok(html.includes('eq_source'), 'обычная вкладка при источнике «Комната»: переключатель есть');
+assert.ok(html.includes('>eq_hint<'), 'правится комнатный источник → обычная подсказка (к музыке комнаты)');
+
+// вкладка «Эквалайзер комнаты»: переключатель скрыт, комнатный заголовок/подсказка
+api2.eqEditSet('room');
+html = api2.eqRenderHtml();
+assert.ok(!html.includes('eq_source'), 'вкладка «Эквалайзер комнаты»: переключателя нет');
+assert.ok(html.includes('sh_eq_room'), 'заголовок «Эквалайзер комнаты»');
+assert.ok(html.includes('>eq_room_hint<'), 'комнатная подсказка на своей вкладке');
+
+// возврат в обычную вкладку — переключатель вернулся
+api2.eqEditSet('auto');
+html = api2.eqRenderHtml();
+assert.ok(html.includes('eq_source'), 'возврат в обычную вкладку: переключатель вернулся');
+
+// личный источник — личная подсказка, переключатель на месте
+store.mp_eq_source = 'personal';
+html = api2.eqRenderHtml();
+assert.ok(html.includes('eq_source'), 'личный источник: переключатель есть');
+assert.ok(html.includes('>eq_personal_hint<'), 'личный источник → личная подсказка');
+delete store.mp_eq_source;
+
+console.log('eq.test: ALL OK (8 блоков)');

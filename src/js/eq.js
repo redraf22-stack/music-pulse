@@ -201,7 +201,12 @@ function ensureEqModal(){
 }
 function eqRenderHtml(){
     const c=eqEditCfg();
-    const inRoom=eqInRoom(),roomMode=eqEditMode()==='room',ed=eqEditable();
+    const inRoom=eqInRoom(),ed=eqEditable();
+    // forcedRoom — мы на ВКЛАДКЕ «Эквалайзер комнаты» (принудительная правка комнатного EQ).
+    // Раньше здесь стоял eqEditMode()==='room', который true и когда слушатель ПРОСТО
+    // слушает источник «Комнатный» (по умолчанию!) — из-за этого у обычного слушателя
+    // в обычной вкладке исчезал переключатель источника и показывалась комнатная подсказка.
+    const forcedRoom=(eqEditTarget==='room'&&inRoom);
     const dis=ed?'':'disabled';
     const bands=EQ_BANDS.map((hz,i)=>
         '<div class="eq-band">'+
@@ -213,7 +218,7 @@ function eqRenderHtml(){
         '<button class="eq-preset" '+dis+' onclick="eqPreset(\''+k+'\')">'+translate(k)+'</button>').join('');
     // Переключатель источника — только в обычной вкладке EQ; вкладка «Эквалайзер комнаты»
     // правит исключительно комнатный (источник слушателя она не трогает)
-    const source=(inRoom&&!roomMode)?
+    const source=(inRoom&&!forcedRoom)?
         '<div class="eq-source"><span class="eq-src-label">'+translate('eq_source')+'</span>'+
         '<button class="eq-preset '+(eqActiveSource()==='room'?'sel':'')+'" onclick="eqSetSource(\'room\')">🎛 '+translate('eq_src_room')+'</button>'+
         '<button class="eq-preset '+(eqActiveSource()==='personal'?'sel':'')+'" onclick="eqSetSource(\'personal\')">🎧 '+translate('eq_src_personal')+'</button>'+
@@ -222,8 +227,9 @@ function eqRenderHtml(){
         :'';
     return '<div class="eq-box">'+
         '<button class="eq-close" onclick="closeEqModal()">✕</button>'+
-        '<h2 class="eq-title">'+(roomMode?translate('sh_eq_room'):translate('eq_title'))+'</h2>'+
-        '<div class="eq-hint">'+(roomMode?translate('eq_room_hint'):translate('eq_hint'))+'</div>'+
+        '<h2 class="eq-title">'+(forcedRoom?translate('sh_eq_room'):translate('eq_title'))+'</h2>'+
+        '<div class="eq-hint">'+(forcedRoom?translate('eq_room_hint'):
+            (eqEditMode()==='room'?translate('eq_hint'):translate('eq_personal_hint')))+'</div>'+
         source+
         '<label class="eq-switch"><input type="checkbox" id="eq-on-check" '+dis+' '+(c.on?'checked':'')+' onchange="eqToggle(this.checked)"> '+translate('eq_on')+'</label>'+
         '<div class="eq-sliders">'+bands+'</div>'+

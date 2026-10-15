@@ -109,11 +109,15 @@ function shEnsure(){
             // прозрачной на карточке, и каждый модал привносил свою подложку: вкладки
             // выглядели по-разному («фон меняется зависимо от выбранной настройки»).
             '#settings-hub .sh-pane{flex:1;overflow-y:auto;padding:20px 24px;min-width:0;background:var(--bg,#121212);scrollbar-gutter:stable;overscroll-behavior:contain;}',
-            '#settings-hub .sh-pane .sh-tab-title{margin:0 0 14px;font-size:16px;color:var(--text,#eee);}',
+            '#settings-hub .sh-pane .sh-tab-title{max-width:480px;margin:0 auto 14px;font-size:16px;color:var(--text,#eee);}',
             // Корни-модалки, перенесённые в панель: гасим оверлей-обвязку (позиция,
             // фон, z-index, display:none от их собственных #id-правил) — стили
             // СОДЕРЖИМОГО при этом остаются от предков с теми же #id.
-            '#settings-hub .sh-pane>#settings-modal,#settings-hub .sh-pane>#devices-modal,#settings-hub .sh-pane>#music-modal,#settings-hub .sh-pane>#room-device-modal,#settings-hub .sh-pane>#hotkeys-modal,#settings-hub .sh-pane>#eq-modal,#settings-hub .sh-pane>#song-settings-modal{position:static!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;inset:auto!important;background:none!important;z-index:auto!important;display:block!important;align-items:unset!important;justify-content:unset!important;max-width:none!important;max-height:none!important;overflow:visible!important;}',
+            '#settings-hub .sh-pane>#settings-modal,#settings-hub .sh-pane>#devices-modal,#settings-hub .sh-pane>#music-modal,#settings-hub .sh-pane>#room-device-modal,#settings-hub .sh-pane>#hotkeys-modal,#settings-hub .sh-pane>#eq-modal,#settings-hub .sh-pane>#song-settings-modal{position:static!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;inset:auto!important;background:none!important;z-index:auto!important;display:block!important;align-items:unset!important;justify-content:unset!important;max-width:480px!important;margin-left:auto!important;margin-right:auto!important;max-height:none!important;overflow:visible!important;}',
+            // Единый размер вкладок: весь контент — одна колонка 480px по центру панели.
+            // Раньше корни растягивались во всю ширину панели и «длинна» вкладки зависела
+            // от того, сколько текста влезало в одну строку — у всех вкладок теперь одинаково.
+            '#settings-hub .sh-pane>*{max-width:480px!important;margin-left:auto!important;margin-right:auto!important;}',
             '#settings-hub .sh-pane .modal-box{background:none!important;border:none!important;padding:0!important;width:auto!important;box-shadow:none!important;max-height:none!important;}',
             '#settings-hub .sh-pane .hk-box,#settings-hub .sh-pane .eq-box,#settings-hub .sh-pane .plv-box{position:static!important;background:none!important;border:none!important;box-shadow:none!important;width:auto!important;max-width:none!important;padding:0!important;max-height:none!important;overflow:visible!important;}',
             // Штартовый хром модалок (заголовок/✕) внутри панели прячем CSS-ом, а не
