@@ -42,7 +42,7 @@ body.dd{outline:2px solid var(--accent);outline-offset:-2px;}
 <button class="fc-round" onclick="toggleEmoji()" title="Эмодзи">😊</button>
 <textarea id="i" placeholder="Сообщение..." maxlength="500"></textarea>
 <button class="fc-round" onclick="pickFile()" title="Прикрепить файл">📎</button>
-<input type="file" id="fi" style="display:none" onchange="onFile(event)">
+<input type="file" id="fi" multiple style="display:none" onchange="onFile(event)">
 <button class="fc-round fc-send" onclick="send()" title="Отправить">➤</button>
 </div>
 <script>
@@ -83,14 +83,17 @@ function send(){const t=IN.value.trim();if(!t)return;if(window.electronAPI&&wind
 IN.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 IN.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';});
 function pickFile(){FI.click();}
-async function onFile(ev){const f=ev.target.files[0];ev.target.value='';if(!f)return;const text=IN.value.trim();
- try{
-  const fd=new FormData();fd.append('file',f);
-  const r=await fetch('/api/upload-chat',{method:'POST',body:fd});const d=await r.json();
-  if(!d.success){sys('⚠ Не удалось загрузить файл');return;}
-  if(window.electronAPI&&window.electronAPI.chatSendMedia){window.electronAPI.chatSendMedia({type:d.type,fileUrl:d.url,fileName:d.name,fileSize:d.size,text:text});IN.value='';IN.style.height='auto';}
-  else sys('⚠ Мост недоступен');
- }catch(e){sys('⚠ Ошибка загрузки файла');}
+async function onFile(ev){const files=Array.from(ev.target.files||[]);ev.target.value='';if(!files.length)return;const text=IN.value.trim();let sent=0;
+ for(let i=0;i<files.length;i++){const f=files[i];
+  try{
+   const fd=new FormData();fd.append('file',f);
+   const r=await fetch('/api/upload-chat',{method:'POST',body:fd});const d=await r.json();
+   if(!d.success){sys('⚠ Не удалось загрузить: '+f.name);continue;}
+   if(window.electronAPI&&window.electronAPI.chatSendMedia){window.electronAPI.chatSendMedia({type:d.type,fileUrl:d.url,fileName:d.name,fileSize:d.size,text:(i===0?text:'')});sent++;}
+   else{sys('⚠ Мост недоступен');break;}
+  }catch(e){sys('⚠ Ошибка загрузки: '+f.name);}
+ }
+ if(sent){IN.value='';IN.style.height='auto';}
 }
 if(window.electronAPI){
  if(window.electronAPI.onChatHistorySync)window.electronAPI.onChatHistorySync(render);

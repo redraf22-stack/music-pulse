@@ -225,10 +225,10 @@
 </div>
 <div class="chat-resize" id="chat-resize"></div>
 </div>
-<input type="file" id="media-input-image" accept="image/*" style="display:none;" onchange="handleMediaPicked(event, 'image')">
-<input type="file" id="media-input-video" accept="video/*" style="display:none;" onchange="handleMediaPicked(event, 'video')">
-<input type="file" id="media-input-audio" accept="audio/*" style="display:none;" onchange="handleMediaPicked(event, 'audio')">
-<input type="file" id="media-input-file" accept="*/*" style="display:none;" onchange="handleMediaPicked(event, 'file')">
+<input type="file" id="media-input-image" accept="image/*" multiple style="display:none;" onchange="handleMediaPicked(event, 'image')">
+<input type="file" id="media-input-video" accept="video/*" multiple style="display:none;" onchange="handleMediaPicked(event, 'video')">
+<input type="file" id="media-input-audio" accept="audio/*" multiple style="display:none;" onchange="handleMediaPicked(event, 'audio')">
+<input type="file" id="media-input-file" accept="*/*" multiple style="display:none;" onchange="handleMediaPicked(event, 'file')">
 <div class="media-viewer" id="media-viewer">
 <button class="media-viewer-close" onclick="closeMediaViewer()">✕</button>
 <a class="media-viewer-download" id="media-viewer-download" download title="Скачать">⬇</a>

@@ -114,11 +114,11 @@ function shEnsure(){
             // фон, z-index, display:none от их собственных #id-правил) — стили
             // СОДЕРЖИМОГО при этом остаются от предков с теми же #id.
             '#settings-hub .sh-pane>#settings-modal,#settings-hub .sh-pane>#devices-modal,#settings-hub .sh-pane>#music-modal,#settings-hub .sh-pane>#room-device-modal,#settings-hub .sh-pane>#hotkeys-modal,#settings-hub .sh-pane>#eq-modal,#settings-hub .sh-pane>#song-settings-modal{position:static!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;inset:auto!important;background:none!important;z-index:auto!important;display:block!important;align-items:unset!important;justify-content:unset!important;max-width:480px!important;margin-left:auto!important;margin-right:auto!important;max-height:none!important;overflow:visible!important;}',
-            // Единый размер вкладок: контент живёт в фиксированной рамке .sh-frame
-            // (один и тот же прямоугольник 480px во всех вкладках — форма окна и
-            // пропорции вообще не меняются при переключении; длинный контент скроллится
-            // ВНУТРИ рамки, а не растягивает окно).
-            '#settings-hub .sh-frame{width:480px;flex:1;min-height:0;margin:0 auto;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;}',
+            // Единый размер вкладок: контент живёт в фиксированной карточке-окошку
+            // .sh-frame — стилизованной как .plv-box (настройки плейлиста): тот же фон,
+            // рамка и радиус. Прямоугольник один и тот же во ВСЕХ вкладках — форма и
+            // пропорции не меняются вовсе; длинный контент скроллится внутри карточки.
+            '#settings-hub .sh-frame{width:480px;flex:1;min-height:0;margin:0 auto;box-sizing:border-box;background:var(--card,#1e1e1e);border:1px solid var(--border,#3a3a3a);border-radius:14px;padding:18px 20px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;}',
             '#settings-hub .sh-pane>*{max-width:480px!important;margin-left:auto!important;margin-right:auto!important;}',
             '#settings-hub .sh-pane .modal-box{background:none!important;border:none!important;padding:0!important;width:auto!important;box-shadow:none!important;max-height:none!important;}',
             '#settings-hub .sh-pane .hk-box,#settings-hub .sh-pane .eq-box,#settings-hub .sh-pane .plv-box{position:static!important;background:none!important;border:none!important;box-shadow:none!important;width:auto!important;max-width:none!important;padding:0!important;max-height:none!important;overflow:visible!important;}',
