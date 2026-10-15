@@ -98,7 +98,7 @@ function openSettings(){
 function closeSettings(){if(typeof shInterceptClose==='function'&&shInterceptClose())return;const m=document.getElementById('settings-modal');if(m)m.classList.remove('open');}
 
 function openDevicesModal(){
-    if(typeof openSettingsHub==='function')return openSettingsHub('devices');
+    if(typeof openSettingsHub==='function')return openSettingsHub('general'); // устройства объединены с «Общими»
     const m=document.getElementById('devices-modal');
     if(!m)return;
     m.classList.add('open');

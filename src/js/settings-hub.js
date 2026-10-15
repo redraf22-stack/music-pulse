@@ -21,9 +21,10 @@ function shTabs(){
     const isIndex=!!document.getElementById('room-device-modal');
     const t=[];
     if(isIndex){
+        // Язык и устройства — ОДНА вкладка: язык (#room-lang-field) физически живёт
+        // внутри #room-device-modal, раньше он выносился отдельной вкладкой «Общие»,
+        // где был только язык — пользователь просил объединить.
         t.push({id:'general',ico:'🌐',label:translate('sh_general'),
-            nodes:()=>[document.getElementById('room-lang-field')].filter(Boolean)});
-        t.push({id:'devices',ico:'🎙',label:translate('sh_devices'),
             nodes:()=>[document.getElementById('room-device-modal')].filter(Boolean),
             show:()=>{try{if(typeof populateRoomDeviceSelects==='function')populateRoomDeviceSelects();}catch(e){}}});
         // «Настройки песен» (поиск/фильтры) — раньше открывались отдельным маленьким
@@ -32,10 +33,9 @@ function shTabs(){
             nodes:()=>[document.getElementById('song-settings-modal')].filter(Boolean),
             show:()=>{try{if(typeof markSongSettings==='function')markSongSettings();}catch(e){}}});
     }else{
+        // На start тоже одна вкладка: устройства (mic/speaker/camera) + язык/автозапуск
         t.push({id:'general',ico:'🌐',label:translate('sh_general'),
-            nodes:()=>[document.getElementById('settings-modal')].filter(Boolean)});
-        t.push({id:'devices',ico:'🎙',label:translate('sh_devices'),
-            nodes:()=>[document.getElementById('devices-modal')].filter(Boolean),
+            nodes:()=>[document.getElementById('devices-modal'),document.getElementById('settings-modal')].filter(Boolean),
             show:()=>{try{if(typeof enumerateDevices==='function')enumerateDevices();}catch(e){}}});
         t.push({id:'music',ico:'🎵',label:translate('sh_music'),
             nodes:()=>[document.getElementById('music-modal')].filter(Boolean),
@@ -120,14 +120,6 @@ function shEnsure(){
             // инлайном: eqSetSource/eqEditSet/openEqModal перерисовывают innerHTML — новые
             // элементы инлайн-скрытие уже не унаследуют, а CSS-правило действует.
             '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-close,#settings-hub .sh-pane .hk-title,#settings-hub .sh-pane .hk-close,#settings-hub .sh-pane .eq-title,#settings-hub .sh-pane .eq-close,#settings-hub .sh-pane .plv-box>h2,#settings-hub .sh-pane .plv-box>.url-modal-close{display:none!important;}',
-            // #room-lang-field (вкладка «Общие» на index) выносится из #room-device-modal,
-            // поэтому #id-область стилей предка не действует — дублируем только для него
-            // (id стоит на самом поле, селекты работают из любого положения).
-            '#room-lang-field.modal-field{margin-bottom:12px;}',
-            '#room-lang-field label{display:block;font-size:12px;color:#9a9a9a;margin-bottom:5px;}',
-            '#room-lang-field .lang-switch{display:flex;gap:8px;}',
-            '#room-lang-field .lang-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--sub);font-weight:bold;font-size:14px;cursor:pointer;text-align:center;}',
-            '#room-lang-field .lang-btn.active{background:var(--accent);color:black;border-color:var(--accent);}',
             // Тех-панель в панели: приводим к единому дизайну вкладок — карточки-строки
             // во всю ширину (label слева, управление справа), без своих фонов и рамок.
             '#settings-hub .sh-pane .tech-panel{position:static!important;display:flex!important;flex-direction:column;gap:10px;width:100%!important;max-width:none!important;background:none!important;border:none!important;padding:0!important;margin:0!important;}',
@@ -178,7 +170,9 @@ function shRestoreAll(){shMoved.forEach((info,node)=>{shRestore(node);});shMoved
 
 function shShow(id){
     const tabs=shTabs();
-    const tab=tabs.find(t=>t.id===id);
+    let tab=tabs.find(t=>t.id===id);
+    // Неизвестный id (вкладка объединена/переименована) → первая обычная вкладка
+    if(!tab)tab=tabs.find(t=>!t.action&&!t.section);
     if(!tab||tab.action)return; // action-вкладки не должны управлять панелью
     // убрать предыдущую вкладку
     if(shCurrentTab){

@@ -207,16 +207,17 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
     const box = lang.parentNode; // .modal-box внутри модалки
 
     hub.openSettingsHub();
-    assert.strictEqual(content(doc).length, 1, 'Общие: в панели поле языка');
-    assert.strictEqual(content(doc)[0], lang, 'Общие: показан room-lang-field');
+    assert.deepStrictEqual(content(doc), [modal], 'Общие (язык+устройства одна вкладка): в панели модалка целиком');
+    assert.strictEqual(lang.parentNode, box, 'язык остался внутри модалки — отдельной вкладки «Общие» больше нет');
 
+    // Старый id «devices» (вкладка объединена) должен падать на первую вкладку, а не пустеть
     hub.shShow('devices');
-    assert.deepStrictEqual(content(doc), [modal], 'Устройства: в панели КОРЕНЬ модалки');
-    assert.strictEqual(lang.parentNode, box, 'язык вернулся в бокс до переезда модалки');
+    assert.deepStrictEqual(content(doc), [modal], 'старый id «devices»: показана первая вкладка');
 
-    hub.shShow('general');
-    assert.deepStrictEqual(content(doc), [lang], 'возврат на Общие: панель НЕ пустая (баг «назад — пусто»)');
-    assert.strictEqual(modal.parentNode, body, 'модалка устройств вернулась в body');
+    // Настройки песен: были отдельным окошком 520px — теперь вкладка хаба
+    const song = doc.getElementById('song-settings-modal');
+    hub.shShow('songs');
+    assert.deepStrictEqual(content(doc), [song], 'Настройки песен: вкладка в хабе');
 
     hub.shShow('eq');
     assert.deepStrictEqual(content(doc), [doc.getElementById('eq-modal')], 'Эквалайзер: в панели корень модалки');
@@ -224,8 +225,9 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
     env.eqSetSource('personal');
     assert.deepStrictEqual(content(doc), [doc.getElementById('eq-modal')], 'после перерисовки EQ панель не опустела');
 
-    hub.shShow('devices');
-    assert.deepStrictEqual(content(doc), [modal], 'переключение после перерисовки EQ — контент на месте');
+    hub.shShow('general');
+    assert.deepStrictEqual(content(doc), [modal], 'возврат на Общие после EQ: панель НЕ пустая (баг «назад — пусто»)');
+    assert.strictEqual(song.parentNode, body, 'Настройки песен вернулись в body');
     assert.strictEqual(doc.getElementById('eq-modal').parentNode, body, 'EQ вернулся в body');
 
     // action-вкладка не должна трогать панель
@@ -234,14 +236,7 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
     assert.deepStrictEqual(content(doc), before, 'action-вкладка не меняет панель');
 
     hub.shShow('general');
-    assert.deepStrictEqual(content(doc), [lang], 'и снова возврат на Общие — не пусто');
-
-    // Настройки песен: были отдельным окошком 520px — теперь вкладка хаба
-    const song = doc.getElementById('song-settings-modal');
-    hub.shShow('songs');
-    assert.deepStrictEqual(content(doc), [song], 'Настройки песен: вкладка в хабе');
-    hub.shShow('general');
-    assert.strictEqual(song.parentNode, body, 'Настройки песен вернулись в body');
+    assert.deepStrictEqual(content(doc), [modal], 'и снова возврат на Общие — не пусто');
 
     // Эквалайзер комнаты: admin-вкладка правит ТОЛЬКО комнатный EQ, источник слушателя
     // не переключается (раньше eqroom принудительно ставил room — баг 2.0.21)
@@ -276,7 +271,7 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
 
     // повторное открытие
     hub.openSettingsHub();
-    assert.deepStrictEqual(content(doc), [lang], 'повторное открытие: контент показан');
+    assert.deepStrictEqual(content(doc), [modal], 'повторное открытие: контент показан');
     hub.closeSettingsHub();
     assertNoWarns(warns);
     console.log('  OK  index: переключения вкладок, action, EQ-перерисовка, eqroom, закрытие/открытие');
@@ -291,9 +286,10 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
     const body = doc.body;
 
     hub.openSettingsHub();
-    assert.deepStrictEqual(content(doc), [doc.getElementById('settings-modal')], 'start/Общие: корень на месте');
+    assert.deepStrictEqual(content(doc), [doc.getElementById('devices-modal'), doc.getElementById('settings-modal')],
+        'start/Общие: устройства + язык/автозапуск в одной вкладке');
 
-    ['devices', 'music', 'hotkeys', 'eq', 'general', 'music', 'general'].forEach(id => {
+    ['music', 'hotkeys', 'eq', 'general', 'music', 'general'].forEach(id => {
         hub.shShow(id);
         assert.ok(content(doc).length > 0, 'start/' + id + ': панель не пустая');
     });

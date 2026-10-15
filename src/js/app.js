@@ -321,7 +321,7 @@ function mkPlViewRow(t,pre){
 function closePlaylistView(){document.getElementById('playlist-view-modal').classList.remove('open');}
 // ===== НАСТРОЙКИ УСТРОЙСТВ В КОМНАТЕ =====
 async function openRoomDeviceSettings(){
-if(typeof openSettingsHub==='function'){openSettingsHub('devices');return;}
+if(typeof openSettingsHub==='function'){openSettingsHub('general');return;} // вкладка «Общие»: язык + устройства
 const m=document.getElementById('room-device-modal');if(!m)return;
 m.style.display='flex';
 await populateRoomDeviceSelects();
