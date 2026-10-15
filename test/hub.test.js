@@ -147,7 +147,7 @@ function loadHub(doc, env) {
     const hub = new Function('document', 'console', 'translate', 'env',
         'const {myRole,isMod,currentRoomCode,ensureHotkeysModal,ensureEqModal,' +
         'populateRoomDeviceSelects,enumerateDevices,loadMusicDirSetting,' +
-        'openPersonalPlaylistsManager,openMyMusic,eqActiveSource,eqSetSource}=env;\n' +
+        'openPersonalPlaylistsManager,openMyMusic,eqEditSet}=env;\n' +
         src + '\nreturn {openSettingsHub,closeSettingsHub,shShow,shTabs};'
     )(doc, stubConsole, translate, env);
     return { hub, warns };
@@ -160,7 +160,13 @@ function makeEnv(doc) {
         openMyMusic: () => {},
         eqSource: 'personal',
         eqActiveSource: () => env.eqSource,
-        eqSetSource: s => { // как в eq.js: переключение ИСТОЧНИКА перерисовывает innerHTML модалки
+        eqEditTarget: 'auto',
+        eqEditSet: t => { // как в eq.js: смена режима редактирования перерисовывает innerHTML модалки
+            env.eqEditTarget = (t === 'room' && env.currentRoomCode) ? 'room' : 'auto';
+            const m = REG.get('eq-modal');
+            if (m) m.innerHTML = '<div class="eq-box"><h2 class="eq-title">t</h2><button class="eq-close">x</button><div class="eq-sliders"></div></div>';
+        },
+        eqSetSource: s => { // источник в обычной вкладке EQ
             env.eqSource = s === 'personal' ? 'personal' : 'room';
             const m = REG.get('eq-modal');
             if (m) m.innerHTML = '<div class="eq-box"><h2 class="eq-title">t</h2><button class="eq-close">x</button><div class="eq-sliders"></div></div>';
@@ -225,11 +231,19 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
     hub.shShow('general');
     assert.deepStrictEqual(content(doc), [lang], 'и снова возврат на Общие — не пусто');
 
-    // Эквалайзер комнаты: admin-вкладка в секции комнаты, источник принудительно room
+    // Эквалайзер комнаты: admin-вкладка правит ТОЛЬКО комнатный EQ, источник слушателя
+    // не переключается (раньше eqroom принудительно ставил room — баг 2.0.21)
     env.eqSource = 'personal';
     hub.shShow('eqroom');
     assert.deepStrictEqual(content(doc), [doc.getElementById('eq-modal')], 'Эквалайзер комнаты: панель не пустая');
-    assert.strictEqual(env.eqSource, 'room', 'eqroom принудительно переключает источник на комнатный');
+    assert.strictEqual(env.eqSource, 'personal', 'eqroom НЕ переключает мой источник слушателя');
+    assert.strictEqual(env.eqEditTarget, 'room', 'eqroom: правим только комнатный EQ');
+
+    // Возврат на обычный EQ — снова правится активный источник
+    hub.shShow('eq');
+    assert.strictEqual(env.eqEditTarget, 'auto', 'обычная вкладка EQ: режим редактирования сброшен');
+    env.eqSetSource('personal');
+    assert.deepStrictEqual(content(doc), [doc.getElementById('eq-modal')], 'после перерисовки EQ панель не опустела');
 
     // Тех-панель
     hub.shShow('room');

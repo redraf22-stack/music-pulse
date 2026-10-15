@@ -39,7 +39,8 @@ function shTabs(){
     t.push({id:'hotkeys',ico:'⌨️',label:translate('sh_hotkeys'),
         nodes:()=>{try{ensureHotkeysModal();}catch(e){}return [document.getElementById('hotkeys-modal')].filter(Boolean);}});
     t.push({id:'eq',ico:'🎛',label:translate('sh_eq'),
-        nodes:()=>{try{ensureEqModal();}catch(e){}return [document.getElementById('eq-modal')].filter(Boolean);}});
+        nodes:()=>{try{ensureEqModal();}catch(e){}return [document.getElementById('eq-modal')].filter(Boolean);},
+        show:()=>{try{if(typeof eqEditSet==='function')eqEditSet('auto');}catch(e){}}});
     t.push({id:'playlists',ico:'📚',label:translate('sh_playlists'),action:()=>{
         try{openPersonalPlaylistsManager();}catch(e){}}});
     if(typeof openMyMusic==='function') // «Моя музыка» живёт в player.js — есть только в комнате
@@ -47,11 +48,13 @@ function shTabs(){
             try{openMyMusic();}catch(e){}}});
     if(shInRoom()&&shIsAdmin()){
         t.push({section:translate('sh_room_section')});
-        // Отдельный вход в КОМНАТНЫЙ эквалайзер (только admin/mod): та же панель,
-        // но с принудительным источником «комната» — как и просил пользователь.
+        // Отдельный вход в КОМНАТНЫЙ эквалайзер (только admin/mod): правит ТОЛЬКО
+        // комнатный EQ — мой источник слушателя не переключает (eqEditTarget='room'),
+        // личный EQ при этом продолжает звучать, если выбран он.
         t.push({id:'eqroom',ico:'🎛',label:translate('sh_eq_room'),
             nodes:()=>{try{ensureEqModal();}catch(e){}return [document.getElementById('eq-modal')].filter(Boolean);},
-            show:()=>{try{if(typeof eqActiveSource==='function'&&eqActiveSource()!=='room'&&typeof eqSetSource==='function')eqSetSource('room');}catch(e){}}});
+            show:()=>{try{if(typeof eqEditSet==='function')eqEditSet('room');}catch(e){}},
+            hide:()=>{try{if(typeof eqEditSet==='function')eqEditSet('auto');}catch(e){}}});
         t.push({id:'room',ico:'⚙️',label:translate('sh_room_tech'),
             nodes:()=>{const p=document.getElementById('tech-settings-panel');return p?[p]:[];},
             show:()=>shTechPanelFix(true),hide:()=>shTechPanelFix(false)});
@@ -92,9 +95,10 @@ function shEnsure(){
             '#settings-hub .sh-close:hover{color:#fff;}',
             '#settings-hub .sh-body{flex:1;display:flex;min-height:0;}',
             '#settings-hub .sh-nav{width:225px;flex-shrink:0;background:var(--bg,#121212);border-right:1px solid var(--border,#2c2c2c);overflow-y:auto;padding:10px 0;}',
-            '#settings-hub .sh-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13.5px;color:#cfcfcf;cursor:pointer;border-left:3px solid transparent;user-select:none;transition:.12s;}',
+            '#settings-hub .sh-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13.5px;color:#cfcfcf;cursor:pointer;user-select:none;transition:.12s;}',
             '#settings-hub .sh-item:hover{background:#232323;color:#fff;}',
-            '#settings-hub .sh-item.active{background:rgba(29,185,84,.1);border-left-color:var(--accent,#1db954);color:var(--accent,#1db954);font-weight:600;}',
+            // Активный пункт — только подсветка фоном/цветом, как в CS: без «марки» слева
+            '#settings-hub .sh-item.active{background:rgba(29,185,84,.1);color:var(--accent,#1db954);font-weight:600;}',
             '#settings-hub .sh-section{margin-top:14px;padding:8px 16px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#7a7a7a;border-top:1px solid #262626;}',
             // Единый фон панели — как страница приложения (--bg). Раньше панель была
             // прозрачной на карточке, и каждый модал привносил свою подложку: вкладки
@@ -108,7 +112,7 @@ function shEnsure(){
             '#settings-hub .sh-pane .modal-box{background:none!important;border:none!important;padding:0!important;width:auto!important;box-shadow:none!important;max-height:none!important;}',
             '#settings-hub .sh-pane .hk-box,#settings-hub .sh-pane .eq-box{position:static!important;background:none!important;border:none!important;box-shadow:none!important;width:auto!important;max-width:none!important;padding:0!important;max-height:none!important;overflow:visible!important;}',
             // Штатный хром модалок (заголовок/✕) внутри панели прячем CSS-ом, а не
-            // инлайном: eqSetSource/openEqModal перерисовывают innerHTML — новые
+            // инлайном: eqSetSource/eqEditSet/openEqModal перерисовывают innerHTML — новые
             // элементы инлайн-скрытие уже не унаследуют, а CSS-правило действует.
             '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-close,#settings-hub .sh-pane .hk-title,#settings-hub .sh-pane .hk-close,#settings-hub .sh-pane .eq-title,#settings-hub .sh-pane .eq-close{display:none!important;}',
             // #room-lang-field (вкладка «Общие» на index) выносится из #room-device-modal,
@@ -119,7 +123,16 @@ function shEnsure(){
             '#room-lang-field .lang-switch{display:flex;gap:8px;}',
             '#room-lang-field .lang-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--sub);font-weight:bold;font-size:14px;cursor:pointer;text-align:center;}',
             '#room-lang-field .lang-btn.active{background:var(--accent);color:black;border-color:var(--accent);}',
-            '#settings-hub .sh-pane .tech-panel{position:static!important;display:block!important;width:100%!important;max-width:430px;}',
+            // Тех-панель в панели: приводим к единому дизайну вкладок — карточки-строки
+            // во всю ширину (label слева, управление справа), без своих фонов и рамок.
+            '#settings-hub .sh-pane .tech-panel{position:static!important;display:flex!important;flex-direction:column;gap:10px;width:100%!important;max-width:none!important;background:none!important;border:none!important;padding:0!important;margin:0!important;}',
+            '#settings-hub .sh-pane .tech-panel .tech-btn{width:100%;box-sizing:border-box;display:flex;align-items:center;text-align:left;padding:11px 13px;min-height:42px;border-radius:10px;border:1px solid var(--border,#333);background:var(--input-bg,#2a2a2a);color:#eee;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit;}',
+            '#settings-hub .sh-pane .tech-panel .tech-btn:hover{border-color:var(--accent,#1db954);color:var(--accent,#1db954);}',
+            '#settings-hub .sh-pane .tech-panel .tech-btn.active{background:rgba(29,185,84,.12);color:var(--accent,#1db954);border-color:var(--accent,#1db954);}',
+            '#settings-hub .sh-pane .tech-panel .voice-toggle-row,#settings-hub .sh-pane .tech-panel .setting-row{box-sizing:border-box;width:100%;margin:0;padding:11px 13px;border:1px solid var(--border,#333);border-radius:10px;background:var(--input-bg,#2a2a2a);gap:12px;font-size:13px;color:#eee;font-weight:600;}',
+            '#settings-hub .sh-pane .tech-panel .sidebar-label{margin:0!important;font-size:13px!important;color:#eee!important;font-weight:600!important;}',
+            '#settings-hub .sh-pane .tech-panel .tech-sub-panel{display:flex;flex-direction:column;gap:10px;background:none!important;border:none!important;padding:0!important;margin:0!important;}',
+            '#settings-hub .sh-pane .tech-panel .tech-sub-panel .setting-row{margin:0;}',
             '#personal-playlists-manager-modal{z-index:3600!important;}',
             '#my-music-modal{z-index:3600!important;}',
             '#edit-track-modal{z-index:3600!important;}'

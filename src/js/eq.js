@@ -8,6 +8,11 @@
 // 'personal' — свой личный, обходит комнатный. Хранение личного: localStorage.mp_eq.
 // Комнатный приходит сервером в sync-состоянии (state.eq), эмитит его админ при правке
 // через debounced update-state {eq:{on,g}} — сервер просто мержит поля состояния.
+//
+// РЕДАКТИРУЕМЫЙ ОБЪЕКТ (eqEditTarget): 'auto' — активный источник; 'room' — только
+// комнатный (вкладка «Эквалайзер комнаты» в хабе). Благодаря этому админ может править
+// комнатный EQ, НЕ переключая себя с личного источника: правки уходят гостям на сервер,
+// а свой слух не меняется. eqCfg — всегда личный конфиг; комнатный живёт в eqRoomCfg.
 const EQ_BANDS=[60,230,910,3600,14000];
 const EQ_FREQ_LABELS=['60','230','910','3.6k','14k'];
 const EQ_PRESETS={
@@ -17,15 +22,29 @@ const EQ_PRESETS={
     eq_p_vocal:[-2,-1,3,5,4],
     eq_p_treble:[-2,0,0,3,6]
 };
-let eqFilters=null,eqCfg=null,eqRoomCfg=null,eqEmitTimer=null;
+let eqFilters=null,eqCfg=null,eqRoomCfg=null,eqEmitTimer=null,eqEditTarget='auto';
 
 function eqInRoom(){try{return typeof currentRoomCode!=='undefined'&&!!currentRoomCode;}catch(e){return false;}}
 function eqIsAdmin(){try{return typeof myRole!=='undefined'&&(myRole==='admin'||(typeof isMod!=='undefined'&&isMod));}catch(e){return false;}}
 function eqSource(){try{const s=localStorage.getItem('mp_eq_source');return s==='personal'?'personal':'room';}catch(e){return 'room';}}
 // Активный источник: комната работает только внутри комнаты, иначе всегда личный
 function eqActiveSource(){return (eqInRoom()&&eqSource()==='room')?'room':'personal';}
-// Можно ли редактировать текущий источник
-function eqEditable(){const a=eqActiveSource();return a==='personal'||eqIsAdmin();}
+// Что правит открытая модалка: обычно активный источник, но вкладка «Эквалайзер
+// комнаты» принудительно правит комнатный — без смены моего источника слушателя.
+function eqEditMode(){return (eqEditTarget==='room'&&eqInRoom())?'room':eqActiveSource();}
+function eqRoomCfgNow(){if(!eqRoomCfg)eqRoomCfg={on:false,g:EQ_BANDS.map(()=>0)};return eqRoomCfg;}
+function eqActiveCfg(){return eqActiveSource()==='room'?(eqRoomCfg||eqLoad()):eqLoad();} // что ЗВУЧИТ
+function eqEditCfg(){return eqEditMode()==='room'?eqRoomCfgNow():eqLoad();} // что ПРАВИМ
+// Можно ли редактировать правимый объект
+function eqEditable(){const es=eqEditMode();return es==='personal'||eqIsAdmin();}
+// Вызывается show/hide-хуками вкладок хаба
+function eqEditSet(t){
+    t=(t==='room'&&eqInRoom())?'room':'auto';
+    if(eqEditTarget===t)return;
+    eqEditTarget=t;
+    const m=document.getElementById('eq-modal');
+    if(m)m.innerHTML=eqRenderHtml(); // режим меняет заголовок/подсказку/переключатель — полная перерисовка
+}
 
 function eqReadPersonal(){
     let c=null;try{c=JSON.parse(localStorage.getItem('mp_eq')||'null');}catch(e){}
@@ -41,8 +60,7 @@ function eqLoad(){
     eqCfg=eqReadPersonal();
     return eqCfg;
 }
-function eqSave(){ // личное храним только в личном режиме — комнатный в mp_eq не пишем
-    if(eqActiveSource()!=='personal')return;
+function eqSave(){ // eqCfg теперь всегда личный (комнатный живёт отдельно в eqRoomCfg)
     try{localStorage.setItem('mp_eq',JSON.stringify(eqCfg));}catch(e){}
 }
 
@@ -52,7 +70,8 @@ function eqBuild(ctx,input,output){
         eqFilters=EQ_BANDS.map((hz,i)=>{
             const f=ctx.createBiquadFilter();
             f.type='peaking';f.frequency.value=hz;f.Q.value=1.1;
-            f.gain.value=eqLoad().on?eqLoad().g[i]:0;
+            const init=eqActiveCfg();
+            f.gain.value=init.on?init.g[i]:0;
             return f;
         });
         input.connect(eqFilters[0]);
@@ -64,7 +83,7 @@ function eqBuild(ctx,input,output){
 
 function eqApply(){
     if(!eqFilters)return;
-    const c=eqLoad();
+    const c=eqActiveCfg();
     const ctx=musicAudioCtx||(eqFilters[0]&&eqFilters[0].context);
     if(!ctx)return;
     eqFilters.forEach((f,i)=>{
@@ -80,16 +99,17 @@ function eqEnsureChain(){
     return !!eqFilters;
 }
 
-function eqChanged(){ // правка локального активного источника → сохранить/применить/отправить
-    eqSave();
+function eqChanged(){ // правка редактируемого объекта → сохранить/применить/отправить
+    const es=eqEditMode();
+    if(es==='personal')eqSave(); // личное — сразу в localStorage
     eqEnsureChain();
-    eqApply();
-    if(eqActiveSource()==='room')eqEmitRoom();
+    if(eqActiveSource()===es)eqApply(); // правим то, что сейчас звучит — применяем к фильтрам
+    if(es==='room')eqEmitRoom(); // комнатный слушают гости — отправить серверу
     eqRefreshUi();
 }
 function eqSetBand(i,v){
     if(!eqEditable())return;
-    const c=eqLoad();
+    const c=eqEditCfg();
     v=parseFloat(v);if(isNaN(v))return;
     c.g[i]=Math.max(-12,Math.min(12,v));
     c.on=true;
@@ -97,33 +117,31 @@ function eqSetBand(i,v){
 }
 function eqToggle(on){
     if(!eqEditable())return;
-    const c=eqLoad();c.on=!!on;
+    const c=eqEditCfg();c.on=!!on;
     eqChanged();
 }
 function eqPreset(name){
     if(!eqEditable())return;
     const p=EQ_PRESETS[name];if(!p)return;
-    const c=eqLoad();c.g=p.slice();c.on=true;
+    const c=eqEditCfg();c.g=p.slice();c.on=true;
     eqChanged();
 }
-// Админ в комнатном режиме → debounced отправка состояния серверу
+// Админ правит комнатный → debounced отправка состояния серверу
 function eqEmitRoom(){
     if(!eqIsAdmin()||!eqInRoom())return;
     clearTimeout(eqEmitTimer);
     eqEmitTimer=setTimeout(()=>{
         try{
-            if(typeof socket!=='undefined'&&socket&&socket.connected&&eqCfg)
-                socket.emit('update-state',{eq:{on:eqCfg.on,g:eqCfg.g.slice()}});
+            if(typeof socket!=='undefined'&&socket&&socket.connected&&eqRoomCfg)
+                socket.emit('update-state',{eq:{on:eqRoomCfg.on,g:eqRoomCfg.g.slice()}});
         }catch(e){}
     },400);
 }
-// Переключатель источника: комната ↔ мой личный
+// Переключатель источника (только в обычной вкладке EQ): комната ↔ мой личный
 function eqSetSource(s){
     s=s==='personal'?'personal':'room';
     try{localStorage.setItem('mp_eq_source',s);}catch(e){}
-    eqCfg=null; // перечитать по активному источнику
-    if(eqActiveSource()==='room'&&eqRoomCfg)eqCfg=eqClone(eqRoomCfg);
-    else eqLoad();
+    // конфиги разделены (личный в eqCfg, комнатный в eqRoomCfg) — переливать не нужно
     eqEnsureChain();
     eqApply();
     if(eqActiveSource()==='room'&&eqIsAdmin())eqEmitRoom(); // закрепить комнатное состояние на сервере
@@ -133,15 +151,13 @@ function eqSetSource(s){
 // Синк сервера: state.eq = комнатный EQ
 function eqOnSync(state){
     if(!state||state.eq===undefined||!state.eq)return;
-    const rc=eqClone(state.eq);
     if(!Array.isArray(state.eq.g)||state.eq.g.length!==EQ_BANDS.length)return; // битый пакет — не берём
+    const rc=eqClone(state.eq);
+    const same=eqRoomCfg&&eqRoomCfg.on===rc.on&&EQ_BANDS.every((hz,i)=>Number(eqRoomCfg.g[i])===Number(rc.g[i]));
     eqRoomCfg=rc;
-    if(eqActiveSource()!=='room')return;
-    if(eqCfg&&eqCfg.on===rc.on&&EQ_BANDS.every((hz,i)=>Number(eqCfg.g[i])===Number(rc.g[i])))return; // уже применено
-    eqCfg=eqClone(rc);
-    eqEnsureChain();
-    eqApply();
-    eqRefreshUi();
+    if(same)return; // уже применено
+    if(eqActiveSource()==='room'){eqEnsureChain();eqApply();} // звучит комнатный — применить
+    if(eqEditMode()==='room')eqRefreshUi(); // на экране правка комнатного — обновить слайдеры
 }
 
 // ===== Модалка (создаётся лениво — тот же приём, что у hotkeys-modal) =====
@@ -184,8 +200,8 @@ function ensureEqModal(){
     m.addEventListener('click',e=>{if(e.target===m)closeEqModal();});
 }
 function eqRenderHtml(){
-    const c=eqLoad();
-    const inRoom=eqInRoom(),act=eqActiveSource(),ed=eqEditable();
+    const c=eqEditCfg();
+    const inRoom=eqInRoom(),roomMode=eqEditMode()==='room',ed=eqEditable();
     const dis=ed?'':'disabled';
     const bands=EQ_BANDS.map((hz,i)=>
         '<div class="eq-band">'+
@@ -195,17 +211,19 @@ function eqRenderHtml(){
         '</div>').join('');
     const presets=Object.keys(EQ_PRESETS).map(k=>
         '<button class="eq-preset" '+dis+' onclick="eqPreset(\''+k+'\')">'+translate(k)+'</button>').join('');
-    const source=inRoom?
+    // Переключатель источника — только в обычной вкладке EQ; вкладка «Эквалайзер комнаты»
+    // правит исключительно комнатный (источник слушателя она не трогает)
+    const source=(inRoom&&!roomMode)?
         '<div class="eq-source"><span class="eq-src-label">'+translate('eq_source')+'</span>'+
-        '<button class="eq-preset '+(act==='room'?'sel':'')+'" onclick="eqSetSource(\'room\')">🎛 '+translate('eq_src_room')+'</button>'+
-        '<button class="eq-preset '+(act==='personal'?'sel':'')+'" onclick="eqSetSource(\'personal\')">🎧 '+translate('eq_src_personal')+'</button>'+
+        '<button class="eq-preset '+(eqActiveSource()==='room'?'sel':'')+'" onclick="eqSetSource(\'room\')">🎛 '+translate('eq_src_room')+'</button>'+
+        '<button class="eq-preset '+(eqActiveSource()==='personal'?'sel':'')+'" onclick="eqSetSource(\'personal\')">🎧 '+translate('eq_src_personal')+'</button>'+
         '</div>'+
-        (act==='room'&&!ed?'<div class="eq-locked">🔒 '+translate('eq_locked')+'</div>':'')
+        (eqActiveSource()==='room'&&!ed?'<div class="eq-locked">🔒 '+translate('eq_locked')+'</div>':'')
         :'';
     return '<div class="eq-box">'+
         '<button class="eq-close" onclick="closeEqModal()">✕</button>'+
-        '<h2 class="eq-title">'+translate('eq_title')+'</h2>'+
-        '<div class="eq-hint">'+translate('eq_hint')+'</div>'+
+        '<h2 class="eq-title">'+(roomMode?translate('sh_eq_room'):translate('eq_title'))+'</h2>'+
+        '<div class="eq-hint">'+(roomMode?translate('eq_room_hint'):translate('eq_hint'))+'</div>'+
         source+
         '<label class="eq-switch"><input type="checkbox" id="eq-on-check" '+dis+' '+(c.on?'checked':'')+' onchange="eqToggle(this.checked)"> '+translate('eq_on')+'</label>'+
         '<div class="eq-sliders">'+bands+'</div>'+
@@ -216,7 +234,7 @@ function eqRenderHtml(){
 }
 function eqRefreshUi(){
     // Точечное обновление — полная перерисовка сломала бы перетаскивание слайдера
-    const c=eqLoad();
+    const c=eqEditCfg();
     EQ_BANDS.forEach((hz,i)=>{
         const s=document.getElementById('eq-b'+i);
         if(s&&parseFloat(s.value)!==c.g[i])s.value=c.g[i];
