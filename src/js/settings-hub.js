@@ -26,6 +26,11 @@ function shTabs(){
         t.push({id:'devices',ico:'🎙',label:translate('sh_devices'),
             nodes:()=>[document.getElementById('room-device-modal')].filter(Boolean),
             show:()=>{try{if(typeof populateRoomDeviceSelects==='function')populateRoomDeviceSelects();}catch(e){}}});
+        // «Настройки песен» (поиск/фильтры) — раньше открывались отдельным маленьким
+        // окошком 520px; теперь это вкладка хаба, чтобы все настройки были одним окном
+        t.push({id:'songs',ico:'🔍',label:translate('sh_songs'),
+            nodes:()=>[document.getElementById('song-settings-modal')].filter(Boolean),
+            show:()=>{try{if(typeof markSongSettings==='function')markSongSettings();}catch(e){}}});
     }else{
         t.push({id:'general',ico:'🌐',label:translate('sh_general'),
             nodes:()=>[document.getElementById('settings-modal')].filter(Boolean)});
@@ -108,13 +113,13 @@ function shEnsure(){
             // Корни-модалки, перенесённые в панель: гасим оверлей-обвязку (позиция,
             // фон, z-index, display:none от их собственных #id-правил) — стили
             // СОДЕРЖИМОГО при этом остаются от предков с теми же #id.
-            '#settings-hub .sh-pane>#settings-modal,#settings-hub .sh-pane>#devices-modal,#settings-hub .sh-pane>#music-modal,#settings-hub .sh-pane>#room-device-modal,#settings-hub .sh-pane>#hotkeys-modal,#settings-hub .sh-pane>#eq-modal{position:static!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;inset:auto!important;background:none!important;z-index:auto!important;display:block!important;align-items:unset!important;justify-content:unset!important;max-width:none!important;max-height:none!important;overflow:visible!important;}',
+            '#settings-hub .sh-pane>#settings-modal,#settings-hub .sh-pane>#devices-modal,#settings-hub .sh-pane>#music-modal,#settings-hub .sh-pane>#room-device-modal,#settings-hub .sh-pane>#hotkeys-modal,#settings-hub .sh-pane>#eq-modal,#settings-hub .sh-pane>#song-settings-modal{position:static!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;inset:auto!important;background:none!important;z-index:auto!important;display:block!important;align-items:unset!important;justify-content:unset!important;max-width:none!important;max-height:none!important;overflow:visible!important;}',
             '#settings-hub .sh-pane .modal-box{background:none!important;border:none!important;padding:0!important;width:auto!important;box-shadow:none!important;max-height:none!important;}',
-            '#settings-hub .sh-pane .hk-box,#settings-hub .sh-pane .eq-box{position:static!important;background:none!important;border:none!important;box-shadow:none!important;width:auto!important;max-width:none!important;padding:0!important;max-height:none!important;overflow:visible!important;}',
-            // Штатный хром модалок (заголовок/✕) внутри панели прячем CSS-ом, а не
+            '#settings-hub .sh-pane .hk-box,#settings-hub .sh-pane .eq-box,#settings-hub .sh-pane .plv-box{position:static!important;background:none!important;border:none!important;box-shadow:none!important;width:auto!important;max-width:none!important;padding:0!important;max-height:none!important;overflow:visible!important;}',
+            // Штартовый хром модалок (заголовок/✕) внутри панели прячем CSS-ом, а не
             // инлайном: eqSetSource/eqEditSet/openEqModal перерисовывают innerHTML — новые
             // элементы инлайн-скрытие уже не унаследуют, а CSS-правило действует.
-            '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-close,#settings-hub .sh-pane .hk-title,#settings-hub .sh-pane .hk-close,#settings-hub .sh-pane .eq-title,#settings-hub .sh-pane .eq-close{display:none!important;}',
+            '#settings-hub .sh-pane .modal-box>h2,#settings-hub .sh-pane .modal-close,#settings-hub .sh-pane .hk-title,#settings-hub .sh-pane .hk-close,#settings-hub .sh-pane .eq-title,#settings-hub .sh-pane .eq-close,#settings-hub .sh-pane .plv-box>h2,#settings-hub .sh-pane .plv-box>.url-modal-close{display:none!important;}',
             // #room-lang-field (вкладка «Общие» на index) выносится из #room-device-modal,
             // поэтому #id-область стилей предка не действует — дублируем только для него
             // (id стоит на самом поле, селекты работают из любого положения).

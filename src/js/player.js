@@ -199,8 +199,8 @@ if(vp)vp.classList.toggle('active',searchViewMode==='pages');if(vl)vl.classList.
 ['all','local','url'].forEach(t=>{const b=document.getElementById('ss-type-'+t);if(b)b.classList.toggle('active',searchFilters.type===t);});
 const sel=document.getElementById('ss-owner');if(sel){const owners=['all',...new Set((lastUsersList||[]).map(u=>u.name))];sel.innerHTML=owners.map(o=>`<option value="${escapeHtml(o)}">${o==='all'?'Все игроки':escapeHtml(o)}</option>`).join('');sel.value=searchFilters.owner;}
 }
-function openSongSettings(){const m=document.getElementById('song-settings-modal');if(!m)return;m.classList.add('open');markSongSettings();}
-function closeSongSettings(){const m=document.getElementById('song-settings-modal');if(m)m.classList.remove('open');}
+function openSongSettings(){if(typeof openSettingsHub==='function')return openSettingsHub('songs');const m=document.getElementById('song-settings-modal');if(!m)return;m.classList.add('open');markSongSettings();}
+function closeSongSettings(){if(typeof shInterceptClose==='function'&&shInterceptClose())return;const m=document.getElementById('song-settings-modal');if(m)m.classList.remove('open');}
 let _searchToken=0;
 let searchCurPage=1;
 const PAGE_SIZE=5;

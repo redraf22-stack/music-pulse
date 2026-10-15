@@ -125,6 +125,11 @@ function fixtureIndex() {
     ['tech-settings-panel', 'admin-controls', 'vote-settings-btn'].forEach(id => {
         const e = doc.createElement('div'); e.id = id; e.style.display = 'none'; doc.body.appendChild(e);
     });
+    // «Настройки песен» — раньше отдельное окошко 520px, теперь вкладка хаба
+    const song = doc.createElement('div'); song.id = 'song-settings-modal'; song.className = 'playlist-view-modal';
+    const pv = doc.createElement('div'); pv.className = 'plv-box';
+    const sh2 = doc.createElement('h2'); const scl = doc.createElement('button'); scl.className = 'url-modal-close';
+    pv.appendChild(sh2); pv.appendChild(scl); song.appendChild(pv); doc.body.appendChild(song);
     return doc;
 }
 function fixtureStart() {
@@ -230,6 +235,13 @@ const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settin
 
     hub.shShow('general');
     assert.deepStrictEqual(content(doc), [lang], 'и снова возврат на Общие — не пусто');
+
+    // Настройки песен: были отдельным окошком 520px — теперь вкладка хаба
+    const song = doc.getElementById('song-settings-modal');
+    hub.shShow('songs');
+    assert.deepStrictEqual(content(doc), [song], 'Настройки песен: вкладка в хабе');
+    hub.shShow('general');
+    assert.strictEqual(song.parentNode, body, 'Настройки песен вернулись в body');
 
     // Эквалайзер комнаты: admin-вкладка правит ТОЛЬКО комнатный EQ, источник слушателя
     // не переключается (раньше eqroom принудительно ставил room — баг 2.0.21)
