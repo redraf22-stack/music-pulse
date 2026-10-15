@@ -193,7 +193,13 @@ function makeEnv(doc) {
 }
 
 const pane = doc => doc.getElementById('sh-pane');
-const content = doc => pane(doc).children.filter(c => c.tagName !== 'H3');
+// Контент вкладок живёт в фиксированной рамке .sh-frame (одинаковый прямоугольник
+// во всех вкладках) — сравниваем детей рамки, а не самой панели
+const content = doc => {
+    const kids = pane(doc).children.filter(c => c.tagName !== 'H3');
+    const frame = kids.find(c => c.className.includes('sh-frame'));
+    return frame ? frame.children.slice() : kids;
+};
 const assertNoWarns = warns => warns.forEach(w => assert.ok(!w.includes('[settings-hub]'), 'найдена пустая вкладка: ' + w));
 
 // ===== Сценарий A: index (комната, admin) =====

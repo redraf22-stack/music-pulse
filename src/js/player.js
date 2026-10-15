@@ -347,10 +347,12 @@ function toggleAddMenu(){const m=document.getElementById('add-menu');if(!m.style
 function closeAddMenu(){document.getElementById('add-menu').style.display='none';}
 document.addEventListener('click',e=>{if(!e.target.closest('#add-menu')&&!e.target.closest('#add-url-btn'))closeAddMenu();});
 (function(){const m=document.getElementById('song-settings-modal');if(m)m.addEventListener('click',e=>{if(e.target===m)closeSongSettings();});})();
-function openFileTrackModal(){closeAddMenu();pendingMusicId='';pendingFtCover='';document.getElementById('ft-file').value='';document.getElementById('ft-cover-input').value='';document.getElementById('ft-cover-preview').src='';document.getElementById('ft-auto-cover').checked=true;document.getElementById('ft-title').value='';document.getElementById('ft-artist').value='';document.getElementById('ft-album').value='';document.getElementById('ft-status').textContent='';const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 Выбрать файл…';pb.classList.remove('has');document.getElementById('file-track-modal').classList.add('open');}
+function openFileTrackModal(){closeAddMenu();pendingMusicId='';pendingFtCover='';pendingMusicFile=null;document.getElementById('ft-file').value='';document.getElementById('ft-cover-input').value='';document.getElementById('ft-cover-preview').src='';document.getElementById('ft-auto-cover').checked=true;document.getElementById('ft-title').value='';document.getElementById('ft-artist').value='';document.getElementById('ft-album').value='';document.getElementById('ft-status').textContent='';const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 Выбрать файлы…';pb.classList.remove('has');document.getElementById('file-track-modal').classList.add('open');}
 function closeFileTrackModal(){document.getElementById('file-track-modal').classList.remove('open');}
 async function pickMusicFile(e){
-const f=e.target.files[0];if(!f)return;pendingMusicFile=f;
+const files=Array.from(e.target.files||[]);if(!files.length)return;
+if(files.length>1){pickMusicFilesBatch(files);return;} // несколько файлов — пакетный режим
+const f=files[0];pendingMusicFile=f;
 const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 '+f.name;pb.classList.add('has');
 document.getElementById('ft-status').textContent='⏳ Загружаю и читаю теги...';
 const fd=new FormData();fd.append('file',f);
@@ -359,6 +361,44 @@ const r=await fetch('/api/upload-music',{method:'POST',body:fd});const d=await r
 if(d.success){pendingMusicId=d.id;document.getElementById('ft-title').value=d.title||'';document.getElementById('ft-artist').value=d.artist||'';document.getElementById('ft-album').value=d.album||'';if(d.cover){pendingFtCover=d.cover;document.getElementById('ft-cover-preview').src=d.cover;document.getElementById('ft-auto-cover').checked=false;document.getElementById('ft-status').textContent='✅ Теги и обложка считаны из файла.';}else{document.getElementById('ft-auto-cover').checked=true;document.getElementById('ft-status').textContent='✅ Теги считаны. Обложки в файле нет — подберём по названию.';}}
 else showToast(d.error||'Ошибка загрузки',true);
 }catch(err){showToast('Ошибка загрузки',true);}
+}
+// Пакетное добавление: выбрал N файлов — каждый грузится и сразу сохраняется
+// по своим тегам (обложка/название/автор читаются из файла), без ручной правки.
+async function pickMusicFilesBatch(files){
+const pb=document.getElementById('ft-pick-btn');pb.textContent='📂 Файлов: '+files.length;pb.classList.add('has');
+const st=document.getElementById('ft-status');
+const isHost=window.electronAPI&&(window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1')&&myRole==='admin';
+const guestLocal=!!window.electronAPI&&!!window.electronAPI.saveMusicFile&&!isHost;
+let ok=0,fail=0;
+for(let i=0;i<files.length;i++){
+const f=files[i];
+st.textContent='⏳ '+(i+1)+'/'+files.length+' — загружаю «'+f.name+'»';
+const fd=new FormData();fd.append('file',f);
+try{
+const r=await fetch('/api/upload-music',{method:'POST',body:fd});const d=await r.json();
+if(!d.success){fail++;continue;}
+const title=d.title||f.name.replace(/\.[a-z0-9]+$/i,'');
+const artist=d.artist||'Unknown Artist';
+if(guestLocal){
+const buf=await f.arrayBuffer();
+let coverData='';
+if(d.cover){try{const rr=await fetch(d.cover);const b=await rr.blob();coverData=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(b);});}catch(err){}}
+const m=f.name.match(/\.[a-z0-9]+$/i);
+const safeName=(artist+' - '+title).replace(/[\\/:*?"<>|]/g,'_')+(m?m[0]:'.mp3');
+const s=await window.electronAPI.saveMusicFile({filename:safeName,data:buf,title:title,artist:artist,album:d.album||'',coverData:coverData});
+if(s&&s.success)ok++;else fail++;
+}else{
+const r2=await fetch('/api/confirm-music',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:d.id,title:title,artist:artist,album:d.album||'',owner:myNickname,cover:d.cover||''})});
+const d2=await r2.json();
+if(d2.success)ok++;else fail++;
+}
+}catch(err){fail++;}
+}
+pendingMusicFile=null;
+if(guestLocal){try{window._plLocalCache=null;await publishPersonalShare();}catch(err){}}
+socket.emit('tracks-changed');searchMusic(1);
+st.textContent='✅ Готово: добавлено '+ok+' из '+files.length+(fail?' (не удалось: '+fail+')':'');
+showToast(fail?'💾 Добавлено '+ok+' из '+files.length+' (ошибок: '+fail+')':'💾 Добавлено треков: '+ok,!!fail);
 }
 async function confirmMusicFile(){
 if(!pendingMusicId){showToast('Сначала выбери файл',true);return;}
